@@ -10,15 +10,15 @@
   --flap-font: 'IBM Plex Mono', ui-monospace, monospace;
   --head-font: 'Archivo', system-ui, sans-serif;
 
-  /* Cell width is the real constraint (36 characters across 4 fields per row),
+  /* Cell width is the real constraint (37 characters across 4 fields per row),
      so font-size tracks width, and height derives from font-size — not the
      other way around. That fills available horizontal space properly instead
      of leaving cells tall but narrow-looking. */
-  --cell-w: clamp(20px, 2.4vw, 30px);
+  --cell-w: clamp(19px, 2.23vw, 29px);
   --glyph-size: calc(var(--cell-w) * 1.5);
   --cell-h: calc(var(--glyph-size) * 1.3);
   --cell-gap: 2px;
-  --field-gap: 10px;
+  --field-gap: 20px;
 }
 
 * { box-sizing: border-box; }
@@ -196,7 +196,7 @@ body {
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6 + 20px)
     calc(var(--cell-w) * 18 + var(--cell-gap) * 17)
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6)
-    calc(var(--cell-w) * 4 + var(--cell-gap) * 3);
+    calc(var(--cell-w) * 5 + var(--cell-gap) * 4);
   column-gap: var(--field-gap);
   padding: 6px 4px 10px;
   border-bottom: 2px solid var(--header-white);
@@ -218,7 +218,7 @@ body {
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
 }
 
@@ -228,7 +228,7 @@ body {
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6 + 20px)
     calc(var(--cell-w) * 18 + var(--cell-gap) * 17)
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6)
-    calc(var(--cell-w) * 4 + var(--cell-gap) * 3);
+    calc(var(--cell-w) * 5 + var(--cell-gap) * 4);
   column-gap: var(--field-gap);
   align-items: center;
   padding: 4px 4px;

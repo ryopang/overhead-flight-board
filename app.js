@@ -26,7 +26,60 @@ function loadMuted() {
   return localStorage.getItem(STORAGE_KEYS.muted) === 'true';
 }
 
-const FIELD_WIDTHS = { flight: 7, airline: 18, route: 7, dist: 4 };
+const FIELD_WIDTHS = { flight: 7, airline: 18, route: 7, eta: 5 };
+
+// ---------------- Airport coordinates (for arrival-time estimate) ----------------
+//
+// Neither adsb.lol nor adsbdb.com provides a scheduled/estimated arrival time —
+// that data lives behind paid flight-schedule APIs, which are out of scope here.
+// Instead: bundle a static, free (public-domain-sourced) IATA -> lat/lon table,
+// and estimate ETA as great-circle distance from the aircraft's *current* position
+// to its destination airport, divided by its *current* ground speed. This is a
+// rough estimate (a climbing or holding aircraft won't be flying a great-circle
+// path yet), shown as such — not a real scheduled arrival time.
+
+let airportCoords = null; // IATA -> {lat, lon}, loaded once
+
+async function loadAirportCoords() {
+  try {
+    const res = await fetch('/airports.json');
+    if (!res.ok) throw new Error(`airports.json ${res.status}`);
+    airportCoords = await res.json();
+  } catch {
+    airportCoords = {}; // ETA will fall back to "--:--" for every row
+  }
+}
+
+const EARTH_RADIUS_NM = 3440.065;
+
+function greatCircleNm(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_NM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const ETA_TIME_FORMAT = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+/** Estimated arrival time in EST/EDT ("14:32"), or "--:--" if it can't be computed. */
+function estimateArrival(ac, destinationIata) {
+  const dest = airportCoords && airportCoords[destinationIata];
+  const gs = ac.gs;
+  if (!dest || !gs || gs < 30 || ac.lat == null || ac.lon == null) return '--:--';
+  const distNm = greatCircleNm(ac.lat, ac.lon, dest.lat, dest.lon);
+  const etaHours = distNm / gs;
+  if (!Number.isFinite(etaHours) || etaHours > 20) return '--:--'; // sanity cap
+  const etaDate = new Date(Date.now() + etaHours * 3600 * 1000);
+  return ETA_TIME_FORMAT.format(etaDate);
+}
 
 // ---------------- Route cache ----------------
 
@@ -94,7 +147,7 @@ async function buildBoard(candidates) {
       flight: ac.flight,
       airline: route.airline,
       route: `${route.origin}→${route.destination}`,
-      dist: `${Math.round(ac.dst ?? 0)}NM`,
+      eta: estimateArrival(ac, route.destination),
       isUS: route.countryIso === 'US',
     });
   }
@@ -163,14 +216,14 @@ class BoardRow {
       <div class="field field-flight"><span class="us-tag">US</span><span class="field-cells"></span></div>
       <div class="field field-airline"></div>
       <div class="field field-route"></div>
-      <div class="field field-dist"></div>
+      <div class="field field-eta"></div>
     `;
     container.appendChild(this.el);
 
     this.flightField = new FlapField(this.el.querySelector('.field-flight .field-cells'), FIELD_WIDTHS.flight);
     this.airlineField = new FlapField(this.el.querySelector('.field-airline'), FIELD_WIDTHS.airline);
     this.routeField = new FlapField(this.el.querySelector('.field-route'), FIELD_WIDTHS.route);
-    this.distField = new FlapField(this.el.querySelector('.field-dist'), FIELD_WIDTHS.dist);
+    this.etaField = new FlapField(this.el.querySelector('.field-eta'), FIELD_WIDTHS.eta);
   }
 
   setData(row, onClack) {
@@ -178,7 +231,7 @@ class BoardRow {
     this.flightField.setValue(row ? row.flight : '', onClack);
     this.airlineField.setValue(row ? row.airline : '', onClack);
     this.routeField.setValue(row ? row.route : '', onClack);
-    this.distField.setValue(row ? row.dist : '', onClack);
+    this.etaField.setValue(row ? row.eta : '', onClack);
   }
 }
 
@@ -281,6 +334,10 @@ function main() {
     document.getElementById('board').removeAttribute('aria-hidden');
     poll();
   }, { once: true });
+
+  // Load in the background — the first poll's ETA column just falls back to
+  // "--:--" for the brief window before this resolves.
+  loadAirportCoords();
 }
 
 document.addEventListener('DOMContentLoaded', main);
