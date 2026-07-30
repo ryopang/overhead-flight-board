@@ -27,8 +27,16 @@ Hard rules:
   underneath), never a crossfade or vertical slide. This happens inside
   individually bordered flap cells, one character per cell — not borderless
   flip text. This is the signature element of the whole project.
-- Sound is synthesized via Web Audio API, never a licensed/sourced audio
-  file.
+- Sound plays through Web Audio API (never a plain `<audio>` tag, so
+  overlapping staggered hits layer correctly). It was originally synthesized
+  in-browser with no audio file at all; the user later explicitly provided
+  `clack.wav` (a short trimmed sample from a reference recording they
+  confirmed is clear of copyright concerns) and asked to use it directly,
+  which is the current state. If asked to touch sound again, confirm which
+  mode is wanted rather than assuming — don't silently swap back to pure
+  synthesis. The original synthesis approach (Karplus-Strong physical
+  modeling) is kept in audio.js as an automatic fallback if the sample fails
+  to load.
 - Only the flip animates. No other decorative motion, no hover states. The
   corner clock uses a separate 7-segment/LCD digit style, not the flap font.
 - Cache adsbdb.com route lookups client-side per callsign (in-memory,

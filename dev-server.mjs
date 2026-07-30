@@ -17,6 +17,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.wav': 'audio/wav',
 };
 
 function proxyJson(upstreamUrl, res) {

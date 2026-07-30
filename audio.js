@@ -1,28 +1,22 @@
-// audio.js — synthesized mechanical "clack" per flip, via Web Audio API. No audio files.
+// audio.js — per-flip "clack" playback via Web Audio API.
 //
-// First attempt used a bank of tuned square oscillators (the classic 808 hi-hat
-// technique) for the resonant body of the sound. That reads as a musical *tone* —
-// too clean, too "electronic" — because summed oscillators is fundamentally a
-// technique for pitched percussion, not for an object physically hitting a stop.
+// Plays back a short (110ms) sample (clack.wav), trimmed from a single isolated
+// hit in a reference recording the user provided directly and confirmed is
+// clear to use. Played through Web Audio (not a plain <audio> tag) so multiple
+// overlapping hits — the per-character stagger across a row — layer cleanly,
+// with small per-hit pitch/gain jitter so a cascade doesn't sound like the same
+// sample looped identically.
 //
-// This version uses Karplus-Strong synthesis instead: a short noise burst excites
-// a feedback delay line with a lowpass filter in the loop, which is the standard
-// physical-modeling technique for a plucked/struck object's natural resonance
-// (originally for guitar strings, but with a short delay + fast decay it's a
-// well-known technique for claves, wood blocks, and knocks — an actual object's
-// decaying resonance rather than a synthesized tone).
-//
-// Tuning is based on actually analyzing a reference split-flap recording locally
-// (envelope + Goertzel frequency scan — see project notes): the real sound has a
-// dominant resonance around 1.1-1.3kHz, a secondary one around 800-900Hz, real
-// broadband energy up to 3-3.5kHz, and — contrary to an earlier assumption —
-// almost no energy below 200Hz. So: two co-occurring knocks at those two
-// resonances, a bright noise transient, and no low-frequency "thump" layer.
+// Falls back to the previous synthesized knock (Karplus-Strong physical
+// modeling — see git history) if the sample fails to load, so the board never
+// goes silent just because one fetch failed.
 
 class ClackPlayer {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.buffer = null;
+    this.bufferPromise = null;
   }
 
   /** Must be called from a user gesture (Safari autoplay policy). */
@@ -31,6 +25,18 @@ class ClackPlayer {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
     if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.bufferPromise = this._loadBuffer();
+  }
+
+  async _loadBuffer() {
+    try {
+      const res = await fetch('/clack.wav');
+      if (!res.ok) throw new Error(`clack.wav ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      this.buffer = await this.ctx.decodeAudioData(arrayBuffer);
+    } catch {
+      this.buffer = null; // clack() falls back to synthesis below
+    }
   }
 
   setMuted(muted) {
@@ -47,13 +53,7 @@ class ClackPlayer {
     return buffer;
   }
 
-  /**
-   * Karplus-Strong knock: noise burst -> feedback delay loop (with a lowpass
-   * filter damping each pass) -> fast decay. Reads as a physical object's brief
-   * resonance, not a musical tone. `feedback` close to 0 = a couple of quick
-   * decaying bounces (a knock); explicitly disconnected after `dur` since a
-   * delay/gain feedback loop otherwise keeps processing (near-silent) forever.
-   */
+  /** Karplus-Strong knock — fallback only, used when clack.wav isn't available. */
   _karplusKnock(ctx, t, freq, gainPeak, feedback, dur) {
     const delayTime = 1 / freq;
     const exciteDur = delayTime * 1.5;
@@ -75,8 +75,6 @@ class ClackPlayer {
     env.gain.setValueAtTime(gainPeak, t);
     env.gain.exponentialRampToValueAtTime(0.001, t + dur);
 
-    // Excitation into the loop, loop feeds back through the damping filter,
-    // and the damped signal is tapped out through its own envelope.
     src.connect(delay);
     delay.connect(damping);
     damping.connect(feedbackGain);
@@ -99,21 +97,9 @@ class ClackPlayer {
     }, cleanupMs);
   }
 
-  clack() {
-    const ctx = this.ctx;
-    if (!ctx || this.muted) return;
-    // iOS/Safari (and other browsers) suspend an idle AudioContext after a while —
-    // over a kiosk session running for hours, this WILL happen eventually. Without
-    // this check, every clack() after that point silently does nothing forever.
-    if (ctx.state === 'suspended') ctx.resume();
-    const t = ctx.currentTime;
-    const jitter = () => 0.9 + Math.random() * 0.2;
-    // Dominant + secondary resonance, measured from a reference recording.
-    const knockFreqHi = 1150 + Math.random() * 200; // ~1.15-1.35kHz, the dominant peak
-    const knockFreqLo = 820 + Math.random() * 130; // ~0.8-0.95kHz, the secondary peak
-
-    // 1) Noise transient — bright, broadband attack edge (reference showed real
-    //    energy up to 3-3.5kHz, not just a dull thud).
+  _synthesizedClack(ctx, t, jitter) {
+    const knockFreqHi = 1150 + Math.random() * 200;
+    const knockFreqLo = 820 + Math.random() * 130;
     {
       const dur = 0.006;
       const src = ctx.createBufferSource();
@@ -128,19 +114,38 @@ class ClackPlayer {
       src.start(t);
       src.stop(t + dur);
     }
-
-    // 2) The knock — two co-occurring resonances (dominant + secondary), matching
-    //    the dual-peak character measured in the reference. No low-frequency
-    //    thump layer: the reference had essentially no energy below ~200Hz.
     this._karplusKnock(ctx, t, knockFreqHi, 0.5 * jitter(), 0.3 + Math.random() * 0.1, 0.035);
     this._karplusKnock(ctx, t, knockFreqLo, 0.32 * jitter(), 0.3 + Math.random() * 0.1, 0.035);
-
-    // 3) Settle knock — quieter secondary hit ~25ms later, as the leaf bounces
-    //    once against its stop before coming to rest.
     {
       const delay = 0.022 + Math.random() * 0.006;
       this._karplusKnock(ctx, t + delay, knockFreqHi * 1.05, 0.16 * jitter(), 0.26, 0.02);
     }
+  }
+
+  clack() {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    // iOS/Safari (and other browsers) suspend an idle AudioContext after a while —
+    // over a kiosk session running for hours, this WILL happen eventually. Without
+    // this check, every clack() after that point silently does nothing forever.
+    if (ctx.state === 'suspended') ctx.resume();
+    const t = ctx.currentTime;
+    const jitter = () => 0.9 + Math.random() * 0.2;
+
+    if (!this.buffer) {
+      this._synthesizedClack(ctx, t, jitter);
+      return;
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = this.buffer;
+    // Slight per-hit pitch/gain variation so a staggered cascade across a row
+    // doesn't sound like the exact same sample looped identically.
+    src.playbackRate.value = 0.94 + Math.random() * 0.12;
+    const g = ctx.createGain();
+    g.gain.value = 0.8 * jitter();
+    src.connect(g).connect(ctx.destination);
+    src.start(t);
   }
 }
 
