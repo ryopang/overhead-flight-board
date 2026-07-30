@@ -7,7 +7,9 @@ const CONFIG = {
   DEFAULT_FLIP_INTERVAL_MS: 60000, // how often the board refreshes/flips; user-configurable
   MIN_FLIP_INTERVAL_MS: 15000, // adsb.lol courtesy floor — never poll faster than this
   ROUTE_CACHE_TTL_MS: 15 * 60 * 1000,
-  MAX_ROWS: 5,
+  MIN_ROWS: 1,
+  MAX_ROWS: 10, // hard cap — the board pre-builds this many row DOM instances
+  DEFAULT_ROWS: 5,
   BACKOFF_START_MS: 5000,
   BACKOFF_MAX_MS: 60000,
 };
@@ -15,6 +17,7 @@ const CONFIG = {
 const STORAGE_KEYS = {
   flipInterval: 'overhead:flipIntervalMs',
   muted: 'overhead:muted',
+  rowCount: 'overhead:rowCount',
 };
 
 function loadFlipInterval() {
@@ -24,6 +27,11 @@ function loadFlipInterval() {
 
 function loadMuted() {
   return localStorage.getItem(STORAGE_KEYS.muted) === 'true';
+}
+
+function loadRowCount() {
+  const stored = Number(localStorage.getItem(STORAGE_KEYS.rowCount));
+  return stored >= CONFIG.MIN_ROWS && stored <= CONFIG.MAX_ROWS ? stored : CONFIG.DEFAULT_ROWS;
 }
 
 const FIELD_WIDTHS = { flight: 7, airline: 18, route: 7, eta: 5 };
@@ -134,11 +142,11 @@ function filterAndSort(aircraft) {
     .sort((a, b) => (a.dst ?? Infinity) - (b.dst ?? Infinity));
 }
 
-/** Build up to MAX_ROWS resolved rows, backfilling from next-nearest when a route fails to resolve. */
-async function buildBoard(candidates) {
+/** Build up to `rowCount` resolved rows, backfilling from next-nearest when a route fails to resolve. */
+async function buildBoard(candidates, rowCount) {
   const rows = [];
   let i = 0;
-  while (rows.length < CONFIG.MAX_ROWS && i < candidates.length) {
+  while (rows.length < rowCount && i < candidates.length) {
     const ac = candidates[i];
     i++;
     const route = await resolveRoute(ac.flight);
@@ -248,10 +256,15 @@ function main() {
   const settingsPanel = document.getElementById('settings-panel');
   const intervalOptions = document.getElementById('interval-options');
   const muteToggle = document.getElementById('mute-toggle');
+  const rowsMinus = document.getElementById('rows-minus');
+  const rowsPlus = document.getElementById('rows-plus');
+  const rowsCountLabel = document.getElementById('rows-count');
 
   initClock(clockEl);
 
   const clack = new ClackPlayer();
+  // Pre-build the max possible rows; unused ones stay hidden rather than being
+  // created/destroyed each time the row count setting changes.
   const boardRows = Array.from({ length: CONFIG.MAX_ROWS }, () => new BoardRow(rowsContainer));
 
   let lastGoodRows = null;
@@ -259,10 +272,22 @@ function main() {
   let pollTimer = null;
   let inBackoff = false;
   let flipIntervalMs = loadFlipInterval();
+  let rowCount = loadRowCount();
+
+  function applyRowCount() {
+    boardRows.forEach((row, i) => {
+      row.el.hidden = i >= rowCount;
+      row.el.classList.toggle('is-last', i === rowCount - 1);
+    });
+    rowsCountLabel.textContent = String(rowCount);
+    rowsMinus.disabled = rowCount <= CONFIG.MIN_ROWS;
+    rowsPlus.disabled = rowCount >= CONFIG.MAX_ROWS;
+  }
+  applyRowCount();
 
   function render(rows) {
     emptyState.hidden = rows.length > 0;
-    for (let i = 0; i < CONFIG.MAX_ROWS; i++) {
+    for (let i = 0; i < rowCount; i++) {
       boardRows[i].setData(rows[i] || null, () => clack.clack());
     }
   }
@@ -271,7 +296,7 @@ function main() {
     try {
       const positions = await fetchPositions();
       const candidates = filterAndSort(positions);
-      const rows = await buildBoard(candidates);
+      const rows = await buildBoard(candidates, rowCount);
       lastGoodRows = rows;
       reconnectBadge.hidden = true;
       backoffMs = CONFIG.BACKOFF_START_MS;
@@ -305,8 +330,15 @@ function main() {
   paintIntervalButtons();
   paintMuteButton();
 
-  settingsBtn.addEventListener('click', () => {
+  settingsBtn.addEventListener('click', (e) => {
     settingsPanel.hidden = !settingsPanel.hidden;
+    e.stopPropagation();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!settingsPanel.hidden && !settingsPanel.contains(e.target)) {
+      settingsPanel.hidden = true;
+    }
   });
 
   intervalOptions.addEventListener('click', (e) => {
@@ -327,6 +359,22 @@ function main() {
     localStorage.setItem(STORAGE_KEYS.muted, String(clack.muted));
     paintMuteButton();
   });
+
+  function setRowCount(next) {
+    rowCount = Math.max(CONFIG.MIN_ROWS, Math.min(CONFIG.MAX_ROWS, next));
+    localStorage.setItem(STORAGE_KEYS.rowCount, String(rowCount));
+    applyRowCount();
+    // A different row count needs a fresh candidate list resolved to match —
+    // re-poll now rather than waiting out the current flip interval, unless
+    // we're mid-backoff (don't fight the reconnect cycle).
+    if (!inBackoff) {
+      if (pollTimer) clearTimeout(pollTimer);
+      poll();
+    }
+  }
+
+  rowsMinus.addEventListener('click', () => setRowCount(rowCount - 1));
+  rowsPlus.addEventListener('click', () => setRowCount(rowCount + 1));
 
   tapStart.addEventListener('click', () => {
     clack.unlock();
