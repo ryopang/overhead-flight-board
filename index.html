@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Overhead — Edgewater, NJ</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="Overhead" />
+<meta name="theme-color" content="#0A0A0A" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Archivo:wght@700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="board" id="board" aria-hidden="true">
+  <header class="board-header">
+    <div class="eyebrow">
+      <svg class="plane-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12.5c0 .3-.2.6-.5.7l-6.7 2.5-1.6 5.6c-.1.4-.5.7-.9.7h-.2c-.4 0-.8-.3-.8-.8l.1-5-4.4 1.6-1.1 2.4c-.1.3-.4.5-.7.5h-.1c-.4 0-.7-.3-.7-.7v-2.9l-2.1-.7c-.3-.1-.5-.4-.5-.7v-.2c0-.3.2-.6.5-.7l2.1-.7V11c0-.4.3-.7.7-.7h.1c.3 0 .6.2.7.5l1.1 2.4 4.4-1.6-.1-8.5c0-.5.4-.8.8-.8h.2c.4 0 .8.3.9.7l1.6 8.6 6.7 2.5c.3.1.5.4.5.7z"/></svg>
+      <span class="eyebrow-title">OVERHEAD</span>
+      <span class="eyebrow-divider">·</span>
+      <span class="eyebrow-location">EDGEWATER, NJ</span>
+      <span class="reconnect-badge" id="reconnect-badge" hidden>RECONNECTING&hellip;</span>
+    </div>
+    <div class="header-right">
+      <button class="settings-btn" id="settings-btn" type="button" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 .1-1 7.6 7.6 0 0 0-.1-1l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.4 7.4 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.5 11a7.6 7.6 0 0 0-.1 1 7.6 7.6 0 0 0 .1 1l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5a.5.5 0 0 0 .6.2l2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6a.5.5 0 0 0 .5.4h4a.5.5 0 0 0 .5-.4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1a.5.5 0 0 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+      </button>
+      <div class="clock" id="clock"></div>
+    </div>
+  </header>
+
+  <div class="settings-panel" id="settings-panel" hidden>
+    <div class="settings-row">
+      <span class="settings-label">FLIP EVERY</span>
+      <div class="settings-options" id="interval-options" role="group">
+        <button type="button" data-interval="15000">15S</button>
+        <button type="button" data-interval="30000">30S</button>
+        <button type="button" data-interval="60000">1M</button>
+        <button type="button" data-interval="120000">2M</button>
+        <button type="button" data-interval="300000">5M</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">SOUND</span>
+      <div class="settings-options">
+        <button type="button" id="mute-toggle" data-muted="false">ON</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="column-headers">
+    <span class="col col-flight">FLIGHT</span>
+    <span class="col col-airline">AIRLINE</span>
+    <span class="col col-route">ROUTE</span>
+    <span class="col col-dist">DIST</span>
+  </div>
+
+  <div class="rows" id="rows"></div>
+
+  <div class="empty-state" id="empty-state" hidden>
+    <span>NO COMMERCIAL TRAFFIC OVERHEAD</span>
+  </div>
+</div>
+
+<div class="splash" id="splash">
+  <div class="splash-inner">
+    <svg class="splash-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12.5c0 .3-.2.6-.5.7l-6.7 2.5-1.6 5.6c-.1.4-.5.7-.9.7h-.2c-.4 0-.8-.3-.8-.8l.1-5-4.4 1.6-1.1 2.4c-.1.3-.4.5-.7.5h-.1c-.4 0-.7-.3-.7-.7v-2.9l-2.1-.7c-.3-.1-.5-.4-.5-.7v-.2c0-.3.2-.6.5-.7l2.1-.7V11c0-.4.3-.7.7-.7h.1c.3 0 .6.2.7.5l1.1 2.4 4.4-1.6-.1-8.5c0-.5.4-.8.8-.8h.2c.4 0 .8.3.9.7l1.6 8.6 6.7 2.5c.3.1.5.4.5.7z"/></svg>
+    <h1>OVERHEAD</h1>
+    <p>Live flights over Edgewater, NJ</p>
+    <button id="tap-start" type="button">TAP TO START BOARD</button>
+  </div>
+</div>
+
+<script src="flap.js"></script>
+<script src="audio.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

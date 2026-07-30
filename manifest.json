@@ -1,0 +1,12 @@
+{
+  "name": "Overhead — Edgewater, NJ",
+  "short_name": "Overhead",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "start_url": "/",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,512 @@
+:root {
+  --board-chassis: #0A0A0A;
+  --cell-bg: #1A1A1A;
+  --cell-border: #2E2E2E;
+  --char-amber: #F7B500;
+  --header-white: #F5F5F0;
+  --us-flag-accent: #3CB878;
+  --status-alert: #E14B3E;
+
+  --flap-font: 'IBM Plex Mono', ui-monospace, monospace;
+  --head-font: 'Archivo', system-ui, sans-serif;
+
+  /* Cell width is the real constraint (36 characters across 4 fields per row),
+     so font-size tracks width, and height derives from font-size — not the
+     other way around. That fills available horizontal space properly instead
+     of leaving cells tall but narrow-looking. */
+  --cell-w: clamp(20px, 2.4vw, 30px);
+  --glyph-size: calc(var(--cell-w) * 1.5);
+  --cell-h: calc(var(--glyph-size) * 1.3);
+  --cell-gap: 2px;
+  --field-gap: 10px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--board-chassis);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------- Board chassis ---------------- */
+
+.board {
+  width: 100%;
+  height: 100%;
+  max-width: 1400px;
+  padding: 16px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.board-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--head-font);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--header-white);
+  font-size: clamp(18px, 2.6vw, 26px);
+}
+
+.plane-icon {
+  width: 1em;
+  height: 1em;
+  fill: var(--char-amber);
+  flex: 0 0 auto;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--cell-border);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--char-amber);
+}
+
+.settings-btn:active {
+  background: var(--cell-bg);
+}
+
+.settings-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  margin: 0 0 4px;
+  background: var(--cell-bg);
+  border: 1px solid var(--cell-border);
+  border-radius: 4px;
+}
+
+.settings-panel[hidden] { display: none; }
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-label {
+  font-family: var(--head-font);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--header-white);
+  font-size: 13px;
+}
+
+.settings-options {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-options button {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 6px 12px;
+  background: var(--board-chassis);
+  border: 1px solid var(--cell-border);
+  border-radius: 3px;
+  color: var(--char-amber);
+  font-family: var(--flap-font);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-options button.active {
+  background: var(--char-amber);
+  color: var(--board-chassis);
+  border-color: var(--char-amber);
+}
+
+.eyebrow-divider {
+  color: var(--cell-border);
+  font-weight: 400;
+}
+
+.eyebrow-location {
+  color: var(--char-amber);
+}
+
+.reconnect-badge {
+  margin-left: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--status-alert);
+  color: var(--status-alert);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  border-radius: 2px;
+  animation: pulse-alert 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-alert {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ---------------- Column headers ---------------- */
+
+.column-headers {
+  display: grid;
+  grid-template-columns:
+    calc(var(--cell-w) * 7 + var(--cell-gap) * 6 + 20px)
+    calc(var(--cell-w) * 18 + var(--cell-gap) * 17)
+    calc(var(--cell-w) * 7 + var(--cell-gap) * 6)
+    calc(var(--cell-w) * 4 + var(--cell-gap) * 3);
+  column-gap: var(--field-gap);
+  padding: 6px 4px 10px;
+  border-bottom: 2px solid var(--header-white);
+  flex: 0 0 auto;
+}
+
+.col {
+  font-family: var(--head-font);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--header-white);
+  font-size: clamp(13px, 1.4vw, 17px);
+}
+
+/* ---------------- Rows ---------------- */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  justify-content: center;
+  gap: 6px;
+}
+
+.flap-row {
+  display: grid;
+  grid-template-columns:
+    calc(var(--cell-w) * 7 + var(--cell-gap) * 6 + 20px)
+    calc(var(--cell-w) * 18 + var(--cell-gap) * 17)
+    calc(var(--cell-w) * 7 + var(--cell-gap) * 6)
+    calc(var(--cell-w) * 4 + var(--cell-gap) * 3);
+  column-gap: var(--field-gap);
+  align-items: center;
+  padding: 4px 4px;
+  border-bottom: 1px solid var(--cell-border);
+}
+
+.flap-row:last-child {
+  border-bottom: none;
+}
+
+.field {
+  display: flex;
+  gap: var(--cell-gap);
+  align-items: center;
+}
+
+.field-flight {
+  position: relative;
+}
+
+.field-cells {
+  display: flex;
+  gap: var(--cell-gap);
+}
+
+.us-tag {
+  width: 16px;
+  height: var(--cell-h);
+  margin-right: 4px;
+  border: 1px solid var(--cell-border);
+  border-radius: 2px;
+  background: var(--cell-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--head-font);
+  font-weight: 800;
+  font-size: 11px;
+  color: var(--board-chassis);
+  flex: 0 0 auto;
+  visibility: hidden;
+}
+
+.flap-row.is-us .us-tag {
+  visibility: visible;
+  background: var(--us-flag-accent);
+  color: #0A0A0A;
+}
+
+/* ---------------- Flap cell (the signature element) ---------------- */
+
+.flap-cell {
+  position: relative;
+  width: var(--cell-w);
+  height: var(--cell-h);
+  perspective: 220px;
+  border: 1px solid var(--cell-border);
+  border-radius: 2px;
+  background: var(--cell-bg);
+  flex: 0 0 auto;
+}
+
+.flap-half {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+  background: var(--cell-bg);
+}
+
+.flap-cell .glyph {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--cell-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--flap-font);
+  font-weight: 700;
+  font-size: var(--glyph-size);
+  color: var(--char-amber);
+  line-height: 1;
+}
+
+.flap-front-top { top: 0; }
+.flap-front-top .glyph { top: 0; }
+
+.flap-front-bottom { bottom: 0; }
+.flap-front-bottom .glyph { top: calc(var(--cell-h) * -0.5); }
+
+/* the moving leaves */
+.flap-leaf {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+  background: var(--cell-bg);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.flap-leaf-top {
+  top: 0;
+  transform-origin: bottom center;
+}
+.flap-leaf-top .glyph { top: 0; }
+.flap-leaf-top::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 55%, rgba(0,0,0,0.45) 100%);
+  pointer-events: none;
+}
+
+.flap-leaf-bottom {
+  bottom: 0;
+  transform-origin: top center;
+}
+.flap-leaf-bottom .glyph { top: calc(var(--cell-h) * -0.5); }
+.flap-leaf-bottom::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, transparent 55%, rgba(0,0,0,0.45) 100%);
+  pointer-events: none;
+}
+
+/* static crease line at the fold */
+.flap-cell::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+  background: rgba(0,0,0,0.55);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ---------------- Empty state ---------------- */
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  font-family: var(--head-font);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--cell-border);
+  font-size: clamp(14px, 1.6vw, 18px);
+}
+
+.empty-state[hidden] { display: none; }
+
+/* ---------------- Clock (separate visual register: 7-segment) ---------------- */
+
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.seg-digit {
+  position: relative;
+  width: 15px;
+  height: 26px;
+}
+
+.seg {
+  position: absolute;
+  background: rgba(247, 181, 0, 0.08);
+}
+.seg.on {
+  background: var(--char-amber);
+  box-shadow: 0 0 6px rgba(247, 181, 0, 0.65), 0 0 1px rgba(247, 181, 0, 0.9);
+}
+
+.seg-a, .seg-d, .seg-g {
+  left: 2px;
+  width: 11px;
+  height: 3px;
+  clip-path: polygon(15% 0%, 85% 0%, 100% 50%, 85% 100%, 15% 100%, 0% 50%);
+}
+.seg-a { top: 0; }
+.seg-g { top: 11.5px; }
+.seg-d { top: 23px; }
+
+.seg-b, .seg-c, .seg-e, .seg-f {
+  width: 3px;
+  height: 10.5px;
+  clip-path: polygon(0% 15%, 50% 0%, 100% 15%, 100% 85%, 50% 100%, 0% 85%);
+}
+.seg-f { left: 0; top: 1.5px; }
+.seg-b { right: 0; top: 1.5px; }
+.seg-e { left: 0; top: 14px; }
+.seg-c { right: 0; top: 14px; }
+
+.seg-colon {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+  height: 26px;
+}
+.seg-colon .dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--char-amber);
+  box-shadow: 0 0 6px rgba(247, 181, 0, 0.65);
+}
+
+/* ---------------- Splash ---------------- */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  background: var(--board-chassis);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.splash[hidden] { display: none; }
+
+.splash-inner {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.splash-plane {
+  width: 48px;
+  height: 48px;
+  fill: var(--char-amber);
+}
+
+.splash-inner h1 {
+  font-family: var(--head-font);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--header-white);
+  font-size: clamp(28px, 6vw, 44px);
+  margin: 0;
+}
+
+.splash-inner p {
+  font-family: var(--flap-font);
+  color: var(--char-amber);
+  font-size: 14px;
+  margin: 0 0 12px;
+  letter-spacing: 0.04em;
+}
+
+#tap-start {
+  font-family: var(--head-font);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  font-size: 16px;
+  color: var(--board-chassis);
+  background: var(--char-amber);
+  border: none;
+  border-radius: 3px;
+  padding: 16px 32px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+#tap-start:active {
+  background: #d99f00;
+}
