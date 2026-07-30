@@ -359,7 +359,7 @@ function milesToLonDegrees(mi, atLat) {
 
 function initMap() {
   map = L.map('map', {
-    zoomControl: true,
+    zoomControl: false, // added manually below, positioned top-right
     dragging: true,
     touchZoom: true,
     scrollWheelZoom: true,
@@ -368,6 +368,7 @@ function initMap() {
     keyboard: true,
     attributionControl: true,
   });
+  L.control.zoom({ position: 'topright' }).addTo(map);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     subdomains: 'abcd',

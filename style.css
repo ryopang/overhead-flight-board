@@ -534,10 +534,22 @@ body {
   color: var(--cell-border) !important;
 }
 
+/* Zoom control lives top-right too (see initMap) — push it down below the
+   radius label so the two never overlap, regardless of exact label width. */
+.leaflet-top.leaflet-right {
+  top: 42px;
+}
+
+.leaflet-control-zoom a {
+  background: rgba(10, 10, 10, 0.85) !important;
+  color: var(--char-amber) !important;
+  border-color: var(--cell-border) !important;
+}
+
 .map-radius-label {
   position: absolute;
   top: 8px;
-  left: 12px;
+  right: 12px;
   z-index: 500;
   font-family: var(--head-font);
   font-weight: 800;
