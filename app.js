@@ -8,7 +8,7 @@ const CONFIG = {
   MIN_RADIUS_MI: 1,
   MAX_RADIUS_MI: 50,
   RADIUS_STEP_MI: 1,
-  MAP_RADIUS_MI: 100, // the map's fixed zoom extent — unrelated to the search radius above
+  MAP_RADIUS_MI: 5, // the map's fixed zoom extent — unrelated to the search radius above
   DEFAULT_FLIP_INTERVAL_MS: 60000, // how often the board refreshes/flips; user-configurable
   MIN_FLIP_INTERVAL_MS: 15000, // adsb.lol courtesy floor — never poll faster than this
   ROUTE_CACHE_TTL_MS: 15 * 60 * 1000,
@@ -373,6 +373,8 @@ function initMap() {
     subdomains: 'abcd',
     maxZoom: 19,
   }).addTo(map);
+  const radiusLabel = document.getElementById('map-radius-label');
+  if (radiusLabel) radiusLabel.textContent = `${CONFIG.MAP_RADIUS_MI}MI RADIUS`;
   recenterMap();
 }
 
@@ -463,6 +465,7 @@ function main() {
   const zipSet = document.getElementById('zip-set');
   const zipStatus = document.getElementById('zip-status');
   const eyebrowLocation = document.getElementById('eyebrow-location');
+  const fullscreenToggle = document.getElementById('fullscreen-toggle');
 
   initClock(clockEl);
   initMap();
@@ -607,6 +610,53 @@ function main() {
   paintMapToggle(mapEnabled);
   mapSection.hidden = !mapEnabled;
   mapToggle.addEventListener('click', () => setMapEnabled(mapSection.hidden));
+
+  // ---- Display: fullscreen (hides Safari's URL bar/toolbar chrome) ----
+  //
+  // Safari on iPad added support for the standard Fullscreen API on ordinary
+  // elements (not just <video>) in relatively recent iPadOS releases; older
+  // iPads won't have it. Feature-detect and hide the control entirely rather
+  // than showing a button that silently does nothing. "Add to Home Screen"
+  // (see manifest.json) remains the more reliable chrome-less option on iOS
+  // regardless of Fullscreen API support.
+
+  const fsRequest =
+    document.documentElement.requestFullscreen ||
+    document.documentElement.webkitRequestFullscreen;
+  const fsExit = document.exitFullscreen || document.webkitExitFullscreen;
+  const fsSupported = !!(fsRequest && fsExit);
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function paintFullscreenButton() {
+    fullscreenToggle.textContent = isFullscreen() ? 'EXIT FULLSCREEN' : 'FULLSCREEN';
+  }
+
+  if (fsSupported) {
+    fullscreenToggle.addEventListener('click', () => {
+      if (isFullscreen()) {
+        fsExit.call(document);
+      } else {
+        // The standard API returns a Promise; the older webkit-prefixed one
+        // (still relevant on some iPadOS versions) doesn't.
+        const result = fsRequest.call(document.documentElement);
+        if (result && typeof result.catch === 'function') {
+          result.catch(() => {
+            // Some browsers reject requestFullscreen outside a "trusted" user
+            // gesture context in edge cases — nothing more to do about it here.
+          });
+        }
+      }
+    });
+    document.addEventListener('fullscreenchange', paintFullscreenButton);
+    document.addEventListener('webkitfullscreenchange', paintFullscreenButton);
+    paintFullscreenButton();
+  } else {
+    fullscreenToggle.disabled = true;
+    fullscreenToggle.textContent = 'UNSUPPORTED';
+  }
 
   function setRowCount(next) {
     rowCount = Math.max(CONFIG.MIN_ROWS, Math.min(CONFIG.MAX_ROWS, next));
