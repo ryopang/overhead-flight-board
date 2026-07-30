@@ -417,8 +417,8 @@ function updateMapFlights(rows) {
       const icon = L.divIcon({
         className: 'map-plane-icon',
         html: `<svg viewBox="0 0 24 24"><path d="${PLANE_PATH_D}"/></svg><span class="map-plane-label">${row.flight}</span>`,
-        iconSize: [18, 18],
-        iconAnchor: [9, 9],
+        iconSize: [27, 27],
+        iconAnchor: [13.5, 13.5],
       });
       marker = L.marker([row.lat, row.lon], { icon }).addTo(map);
       flightMarkers.set(row.flight, marker);
