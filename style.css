@@ -14,7 +14,7 @@
      so font-size tracks width, and height derives from font-size — not the
      other way around. That fills available horizontal space properly instead
      of leaving cells tall but narrow-looking. */
-  --cell-w: clamp(18px, 2.17vw, 28px);
+  --cell-w: clamp(17px, 2.05vw, 26px);
   --glyph-size: calc(var(--cell-w) * 1.5);
   --cell-h: calc(var(--glyph-size) * 1.3);
   --cell-gap: 2px;
@@ -27,9 +27,9 @@ html, body {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
   background: var(--board-chassis);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -37,8 +37,19 @@ html, body {
 
 body {
   display: flex;
-  align-items: center;
   justify-content: center;
+}
+
+/* ---------------- Page (board + map, stacked) ---------------- */
+/* The board always fills exactly one screen; the map (if enabled) is a second,
+   full-width section reached by scrolling down — never both squeezed into one
+   viewport. */
+
+.page {
+  width: 100%;
+  max-width: 1400px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ---------------- Board chassis ---------------- */
@@ -46,8 +57,8 @@ body {
 .board {
   position: relative;
   width: 100%;
-  height: 100%;
-  max-width: 1400px;
+  height: 100vh;
+  flex: 0 0 auto;
   padding: 16px 16px 12px;
   display: flex;
   flex-direction: column;
@@ -192,6 +203,49 @@ body {
   color: var(--header-white);
 }
 
+.zip-input-group {
+  align-items: center;
+}
+
+#zip-input {
+  width: 76px;
+  min-height: 40px;
+  padding: 6px 10px;
+  background: var(--board-chassis);
+  border: 1px solid var(--cell-border);
+  border-radius: 3px;
+  color: var(--char-amber);
+  font-family: var(--flap-font);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
+#zip-input:focus {
+  outline: 2px solid var(--char-amber);
+  outline-offset: 1px;
+}
+
+.settings-status-row {
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.settings-status {
+  font-family: var(--flap-font);
+  font-size: 11px;
+  color: var(--cell-border);
+  min-height: 14px;
+}
+
+.settings-status.is-error {
+  color: var(--status-alert);
+}
+
+.settings-status.is-ok {
+  color: var(--us-flag-accent);
+}
+
 .eyebrow-divider {
   color: var(--cell-border);
   font-weight: 400;
@@ -223,7 +277,7 @@ body {
   display: grid;
   grid-template-columns:
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6 + 20px)
-    calc(var(--cell-w) * 18 + var(--cell-gap) * 17)
+    calc(var(--cell-w) * 18 + var(--cell-gap) * 17 + 32px)
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6)
     calc(var(--cell-w) * 5 + var(--cell-gap) * 4);
   column-gap: var(--field-gap);
@@ -255,7 +309,7 @@ body {
   display: grid;
   grid-template-columns:
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6 + 20px)
-    calc(var(--cell-w) * 18 + var(--cell-gap) * 17)
+    calc(var(--cell-w) * 18 + var(--cell-gap) * 17 + 32px)
     calc(var(--cell-w) * 7 + var(--cell-gap) * 6)
     calc(var(--cell-w) * 5 + var(--cell-gap) * 4);
   column-gap: var(--field-gap);
@@ -285,6 +339,28 @@ body {
 .field-cells {
   display: flex;
   gap: var(--cell-gap);
+}
+
+.airline-logo {
+  width: 26px;
+  height: var(--cell-h);
+  margin-right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.airline-logo-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  visibility: hidden;
+}
+
+.airline-logo-img.is-loaded {
+  visibility: visible;
 }
 
 .us-tag {
@@ -422,6 +498,89 @@ body {
 
 .empty-state[hidden] { display: none; }
 
+/* ---------------- Map ---------------- */
+
+.map-section {
+  position: relative;
+  z-index: 0; /* contains Leaflet's internal panes in their own stacking context */
+  flex: 0 0 auto;
+  height: 100vh;
+  border-top: 1px solid var(--cell-border);
+  background: var(--board-chassis);
+}
+
+.map-section[hidden] {
+  display: none;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  background: var(--board-chassis);
+}
+
+/* Leaflet's own UI chrome, restyled to match the board rather than its default look. */
+.leaflet-control-attribution {
+  background: rgba(10, 10, 10, 0.7) !important;
+  color: var(--cell-border) !important;
+  font-family: var(--flap-font) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a {
+  color: var(--cell-border) !important;
+}
+
+.map-radius-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 500;
+  font-family: var(--head-font);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  color: var(--header-white);
+  background: rgba(10, 10, 10, 0.7);
+  padding: 3px 8px;
+  border: 1px solid var(--cell-border);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.map-home-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--header-white);
+  border: 2px solid var(--board-chassis);
+  box-shadow: 0 0 0 1px var(--header-white);
+}
+
+.map-plane-icon {
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+}
+.map-plane-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: var(--char-amber);
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8));
+}
+.map-plane-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 1px;
+  font-family: var(--flap-font);
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--char-amber);
+  white-space: nowrap;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.9);
+}
+
 /* ---------------- Clock (separate visual register: 7-segment) ---------------- */
 
 .clock {
@@ -490,7 +649,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* Leaflet's internal panes (tile/marker/popup) run up to z-index ~700 and, since
+     .map-section has no z-index of its own to contain them in a local stacking
+     context, they escape to the document root — must outrank all of them. */
+  z-index: 9999;
 }
 
 .splash[hidden] { display: none; }

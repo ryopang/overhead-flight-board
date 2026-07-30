@@ -66,6 +66,70 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === '/api/geocode') {
+    const zip = url.searchParams.get('zip');
+    if (!zip || !/^\d{5}$/.test(zip)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'zip must be a 5-digit US ZIP code' }));
+      return;
+    }
+    proxyJson(`https://api.zippopotam.us/us/${zip}`, res);
+    return;
+  }
+
+  if (url.pathname === '/api/logo') {
+    const iata = url.searchParams.get('iata');
+    if (!iata) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'iata is required' }));
+      return;
+    }
+    const PLACEHOLDER_BYTES = 3103;
+    https
+      .get(`https://images.kiwi.com/airlines/64/${encodeURIComponent(iata)}.png`, (upstreamRes) => {
+        // Follow the redirect kiwi always issues (real logo or its placeholder).
+        if (upstreamRes.statusCode >= 300 && upstreamRes.statusCode < 400 && upstreamRes.headers.location) {
+          https.get(upstreamRes.headers.location, (finalRes) => {
+            const chunks = [];
+            finalRes.on('data', (c) => chunks.push(c));
+            finalRes.on('end', () => {
+              const buf = Buffer.concat(chunks);
+              if (finalRes.statusCode !== 200 || buf.length === PLACEHOLDER_BYTES) {
+                res.writeHead(404);
+                res.end();
+                return;
+              }
+              res.writeHead(200, {
+                'Content-Type': 'image/png',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=86400',
+              });
+              res.end(buf);
+            });
+          }).on('error', () => { res.writeHead(502); res.end(); });
+          return;
+        }
+        const chunks = [];
+        upstreamRes.on('data', (c) => chunks.push(c));
+        upstreamRes.on('end', () => {
+          const buf = Buffer.concat(chunks);
+          if (upstreamRes.statusCode !== 200 || buf.length === PLACEHOLDER_BYTES) {
+            res.writeHead(404);
+            res.end();
+            return;
+          }
+          res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=86400',
+          });
+          res.end(buf);
+        });
+      })
+      .on('error', () => { res.writeHead(502); res.end(); });
+    return;
+  }
+
   // Static files
   let filePath = url.pathname === '/' ? '/index.html' : url.pathname;
   filePath = path.join(ROOT, filePath);

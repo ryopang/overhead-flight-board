@@ -1,9 +1,14 @@
 // app.js — polling loop, filtering/sorting, route enrichment + caching, rendering, resilience.
 
 const CONFIG = {
-  LAT: 40.8256,
-  LON: -73.9765,
-  RADIUS_NM: 10,
+  DEFAULT_ZIP: '07020',
+  DEFAULT_LAT: 40.8256, // Edgewater, NJ — used until a zip resolves, and as a hard fallback
+  DEFAULT_LON: -73.9765,
+  DEFAULT_RADIUS_MI: 25, // "overhead" search radius for the flip board — user-configurable
+  MIN_RADIUS_MI: 1,
+  MAX_RADIUS_MI: 50,
+  RADIUS_STEP_MI: 1,
+  MAP_RADIUS_MI: 100, // the map's fixed zoom extent — unrelated to the search radius above
   DEFAULT_FLIP_INTERVAL_MS: 60000, // how often the board refreshes/flips; user-configurable
   MIN_FLIP_INTERVAL_MS: 15000, // adsb.lol courtesy floor — never poll faster than this
   ROUTE_CACHE_TTL_MS: 15 * 60 * 1000,
@@ -18,6 +23,9 @@ const STORAGE_KEYS = {
   flipInterval: 'overhead:flipIntervalMs',
   muted: 'overhead:muted',
   rowCount: 'overhead:rowCount',
+  zip: 'overhead:zip',
+  radiusMi: 'overhead:radiusMi',
+  mapEnabled: 'overhead:mapEnabled',
 };
 
 function loadFlipInterval() {
@@ -32,6 +40,44 @@ function loadMuted() {
 function loadRowCount() {
   const stored = Number(localStorage.getItem(STORAGE_KEYS.rowCount));
   return stored >= CONFIG.MIN_ROWS && stored <= CONFIG.MAX_ROWS ? stored : CONFIG.DEFAULT_ROWS;
+}
+
+function loadZip() {
+  const stored = localStorage.getItem(STORAGE_KEYS.zip);
+  return stored && /^\d{5}$/.test(stored) ? stored : CONFIG.DEFAULT_ZIP;
+}
+
+function loadRadiusMi() {
+  const stored = Number(localStorage.getItem(STORAGE_KEYS.radiusMi));
+  return stored >= CONFIG.MIN_RADIUS_MI && stored <= CONFIG.MAX_RADIUS_MI ? stored : CONFIG.DEFAULT_RADIUS_MI;
+}
+
+function loadMapEnabled() {
+  const stored = localStorage.getItem(STORAGE_KEYS.mapEnabled);
+  return stored === null ? true : stored === 'true'; // default on
+}
+
+const MI_PER_NM = 1.15078;
+
+// Current tracking location — mutable, changed via the ZIP setting. Starts at the
+// Edgewater default; main() overwrites it once the stored/default zip geocodes.
+const trackingLocation = { lat: CONFIG.DEFAULT_LAT, lon: CONFIG.DEFAULT_LON };
+
+// Current "overhead" search radius in miles — mutable, changed via the RADIUS setting.
+let searchRadiusMi = CONFIG.DEFAULT_RADIUS_MI;
+
+/** Resolve a 5-digit US ZIP to {lat, lon, label} via the geocode proxy (zippopotam.us). */
+async function geocodeZip(zip) {
+  const res = await fetch(`/api/geocode?zip=${encodeURIComponent(zip)}`);
+  if (!res.ok) throw new Error(`zip not found`);
+  const json = await res.json();
+  const place = json.places && json.places[0];
+  if (!place) throw new Error('zip not found');
+  return {
+    lat: Number(place.latitude),
+    lon: Number(place.longitude),
+    label: `${place['place name']}, ${place['state abbreviation']}`.toUpperCase(),
+  };
 }
 
 const FIELD_WIDTHS = { flight: 7, airline: 18, route: 7, eta: 5 };
@@ -106,6 +152,7 @@ async function resolveRoute(callsign) {
     const data = fr
       ? {
           airline: (fr.airline && fr.airline.name) || 'UNKNOWN',
+          iata: fr.airline && fr.airline.iata,
           countryIso: fr.airline && fr.airline.country_iso,
           origin: (fr.origin && fr.origin.iata_code) || '---',
           destination: (fr.destination && fr.destination.iata_code) || '---',
@@ -119,10 +166,41 @@ async function resolveRoute(callsign) {
   }
 }
 
+// ---------------- Airline logos ----------------
+//
+// Neither locked API provides logos. images.kiwi.com is a free, keyless image CDN
+// keyed by 2-letter IATA airline code, commonly used by hobby flight projects —
+// proxied through /api/logo (same reasoning as the other three upstreams: one
+// consistent same-origin fetch path). The proxy also filters out kiwi's "unknown
+// airline" placeholder image server-side and returns a plain 404 instead, so an
+// unrecognized code just leaves the logo blank.
+
+const logoCache = new Map(); // iata -> objectURL string | null
+
+async function resolveLogo(iata) {
+  if (!iata) return null;
+  if (logoCache.has(iata)) return logoCache.get(iata);
+  try {
+    const res = await fetch(`/api/logo?iata=${encodeURIComponent(iata)}`);
+    if (!res.ok) {
+      logoCache.set(iata, null);
+      return null;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    logoCache.set(iata, url);
+    return url;
+  } catch {
+    logoCache.set(iata, null);
+    return null;
+  }
+}
+
 // ---------------- Position fetch + filtering ----------------
 
 async function fetchPositions() {
-  const res = await fetch(`/api/adsb?lat=${CONFIG.LAT}&lon=${CONFIG.LON}&radius=${CONFIG.RADIUS_NM}`);
+  const radiusNm = searchRadiusMi / MI_PER_NM;
+  const res = await fetch(`/api/adsb?lat=${trackingLocation.lat}&lon=${trackingLocation.lon}&radius=${radiusNm}`);
   if (!res.ok) throw new Error(`adsb fetch ${res.status}`);
   const json = await res.json();
   return Array.isArray(json.ac) ? json.ac : [];
@@ -151,12 +229,17 @@ async function buildBoard(candidates, rowCount) {
     i++;
     const route = await resolveRoute(ac.flight);
     if (!route) continue; // GA / unresolved — drop and backfill from next candidate
+    const logoUrl = await resolveLogo(route.iata);
     rows.push({
       flight: ac.flight,
       airline: route.airline,
       route: `${route.origin}→${route.destination}`,
       eta: estimateArrival(ac, route.destination),
       isUS: route.countryIso === 'US',
+      logoUrl,
+      lat: ac.lat,
+      lon: ac.lon,
+      track: ac.dir,
     });
   }
   return rows;
@@ -222,16 +305,17 @@ class BoardRow {
     this.el.className = 'flap-row';
     this.el.innerHTML = `
       <div class="field field-flight"><span class="us-tag">US</span><span class="field-cells"></span></div>
-      <div class="field field-airline"></div>
+      <div class="field field-airline"><span class="airline-logo"><img class="airline-logo-img" alt="" /></span><span class="field-cells"></span></div>
       <div class="field field-route"></div>
       <div class="field field-eta"></div>
     `;
     container.appendChild(this.el);
 
     this.flightField = new FlapField(this.el.querySelector('.field-flight .field-cells'), FIELD_WIDTHS.flight);
-    this.airlineField = new FlapField(this.el.querySelector('.field-airline'), FIELD_WIDTHS.airline);
+    this.airlineField = new FlapField(this.el.querySelector('.field-airline .field-cells'), FIELD_WIDTHS.airline);
     this.routeField = new FlapField(this.el.querySelector('.field-route'), FIELD_WIDTHS.route);
     this.etaField = new FlapField(this.el.querySelector('.field-eta'), FIELD_WIDTHS.eta);
+    this.logoImg = this.el.querySelector('.airline-logo-img');
   }
 
   setData(row, onClack) {
@@ -240,6 +324,117 @@ class BoardRow {
     this.airlineField.setValue(row ? row.airline : '', onClack);
     this.routeField.setValue(row ? row.route : '', onClack);
     this.etaField.setValue(row ? row.eta : '', onClack);
+    if (row && row.logoUrl) {
+      this.logoImg.src = row.logoUrl;
+      this.logoImg.classList.add('is-loaded');
+    } else {
+      this.logoImg.classList.remove('is-loaded');
+      this.logoImg.removeAttribute('src');
+    }
+  }
+}
+
+// ---------------- Map ----------------
+//
+// Shows the same flights already on the board (still just the ones currently
+// overhead, within RADIUS_NM) plotted on a map zoomed out to a MAP_RADIUS_MI-wide
+// view of the tracking location — geographic context, not an expanded search.
+// Static/non-interactive by design, matching the board's "nothing moves except
+// the flip" kiosk philosophy.
+
+const PLANE_PATH_D =
+  'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z';
+
+let map = null;
+let homeMarker = null;
+let radiusCircle = null;
+let flightMarkers = new Map(); // flight number -> L.Marker
+
+function milesToLatDegrees(mi) {
+  return mi / 69;
+}
+function milesToLonDegrees(mi, atLat) {
+  return mi / (69 * Math.cos((atLat * Math.PI) / 180));
+}
+
+function initMap() {
+  map = L.map('map', {
+    zoomControl: true,
+    dragging: true,
+    touchZoom: true,
+    scrollWheelZoom: true,
+    doubleClickZoom: true,
+    boxZoom: true,
+    keyboard: true,
+    attributionControl: true,
+  });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  }).addTo(map);
+  recenterMap();
+}
+
+function recenterMap() {
+  if (!map) return;
+  const dLat = milesToLatDegrees(CONFIG.MAP_RADIUS_MI);
+  const dLon = milesToLonDegrees(CONFIG.MAP_RADIUS_MI, trackingLocation.lat);
+  map.fitBounds([
+    [trackingLocation.lat - dLat, trackingLocation.lon - dLon],
+    [trackingLocation.lat + dLat, trackingLocation.lon + dLon],
+  ]);
+
+  if (homeMarker) homeMarker.remove();
+  homeMarker = L.marker([trackingLocation.lat, trackingLocation.lon], {
+    icon: L.divIcon({ className: '', html: '<div class="map-home-dot"></div>', iconSize: [10, 10] }),
+  }).addTo(map);
+
+  if (radiusCircle) radiusCircle.remove();
+  radiusCircle = L.circle([trackingLocation.lat, trackingLocation.lon], {
+    radius: CONFIG.MAP_RADIUS_MI * 1609.34, // miles -> meters
+    color: '#2E2E2E',
+    weight: 1,
+    fill: false,
+  }).addTo(map);
+
+  // Container size can change (e.g. settings panel affecting layout); fitBounds
+  // needs an accurate size to compute zoom correctly.
+  setTimeout(() => map.invalidateSize(), 50);
+}
+
+function updateMapFlights(rows) {
+  if (!map) return;
+  const seen = new Set();
+  for (const row of rows) {
+    if (row.lat == null || row.lon == null) continue;
+    seen.add(row.flight);
+    const rotation = row.track != null ? row.track : 0;
+    let marker = flightMarkers.get(row.flight);
+    if (!marker) {
+      const icon = L.divIcon({
+        className: 'map-plane-icon',
+        html: `<svg viewBox="0 0 24 24"><path d="${PLANE_PATH_D}"/></svg><span class="map-plane-label">${row.flight}</span>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+      });
+      marker = L.marker([row.lat, row.lon], { icon }).addTo(map);
+      flightMarkers.set(row.flight, marker);
+    } else {
+      marker.setLatLng([row.lat, row.lon]);
+    }
+    const el = marker.getElement();
+    if (el) {
+      const svg = el.querySelector('svg');
+      if (svg) svg.style.transform = `rotate(${rotation}deg)`;
+    }
+  }
+  // Drop markers for flights no longer on the board.
+  for (const [flight, marker] of flightMarkers) {
+    if (!seen.has(flight)) {
+      marker.remove();
+      flightMarkers.delete(flight);
+    }
   }
 }
 
@@ -256,11 +451,21 @@ function main() {
   const settingsPanel = document.getElementById('settings-panel');
   const intervalOptions = document.getElementById('interval-options');
   const muteToggle = document.getElementById('mute-toggle');
+  const mapToggle = document.getElementById('map-toggle');
+  const mapSection = document.getElementById('map-section');
   const rowsMinus = document.getElementById('rows-minus');
   const rowsPlus = document.getElementById('rows-plus');
   const rowsCountLabel = document.getElementById('rows-count');
+  const radiusMinus = document.getElementById('radius-minus');
+  const radiusPlus = document.getElementById('radius-plus');
+  const radiusCountLabel = document.getElementById('radius-count');
+  const zipInput = document.getElementById('zip-input');
+  const zipSet = document.getElementById('zip-set');
+  const zipStatus = document.getElementById('zip-status');
+  const eyebrowLocation = document.getElementById('eyebrow-location');
 
   initClock(clockEl);
+  initMap();
 
   const clack = new ClackPlayer();
   // Pre-build the max possible rows; unused ones stay hidden rather than being
@@ -282,6 +487,9 @@ function main() {
     rowsCountLabel.textContent = String(rowCount);
     rowsMinus.disabled = rowCount <= CONFIG.MIN_ROWS;
     rowsPlus.disabled = rowCount >= CONFIG.MAX_ROWS;
+    // The map fills whatever space is left below the rows, so a row-count change
+    // resizes it — let layout settle, then tell Leaflet its container changed.
+    if (map) setTimeout(() => map.invalidateSize(), 60);
   }
   applyRowCount();
 
@@ -290,6 +498,7 @@ function main() {
     for (let i = 0; i < rowCount; i++) {
       boardRows[i].setData(rows[i] || null, () => clack.clack());
     }
+    updateMapFlights(rows);
   }
 
   async function poll() {
@@ -360,6 +569,27 @@ function main() {
     paintMuteButton();
   });
 
+  // ---- Settings: map on/off (collapsible — reached by scrolling below the
+  // always-full-screen board, never squeezed into it) ----
+
+  function paintMapToggle(enabled) {
+    mapToggle.textContent = enabled ? 'ON' : 'OFF';
+    mapToggle.classList.toggle('active', enabled);
+  }
+
+  function setMapEnabled(enabled) {
+    localStorage.setItem(STORAGE_KEYS.mapEnabled, String(enabled));
+    paintMapToggle(enabled);
+    mapSection.hidden = !enabled;
+    // Leaflet can't measure a display:none container — resize once it's visible again.
+    if (enabled && map) setTimeout(() => map.invalidateSize(), 60);
+  }
+
+  const mapEnabled = loadMapEnabled();
+  paintMapToggle(mapEnabled);
+  mapSection.hidden = !mapEnabled;
+  mapToggle.addEventListener('click', () => setMapEnabled(mapSection.hidden));
+
   function setRowCount(next) {
     rowCount = Math.max(CONFIG.MIN_ROWS, Math.min(CONFIG.MAX_ROWS, next));
     localStorage.setItem(STORAGE_KEYS.rowCount, String(rowCount));
@@ -376,6 +606,73 @@ function main() {
   rowsMinus.addEventListener('click', () => setRowCount(rowCount - 1));
   rowsPlus.addEventListener('click', () => setRowCount(rowCount + 1));
 
+  function applyRadius() {
+    radiusCountLabel.textContent = String(searchRadiusMi);
+    radiusMinus.disabled = searchRadiusMi <= CONFIG.MIN_RADIUS_MI;
+    radiusPlus.disabled = searchRadiusMi >= CONFIG.MAX_RADIUS_MI;
+  }
+
+  function setRadius(next) {
+    searchRadiusMi = Math.max(CONFIG.MIN_RADIUS_MI, Math.min(CONFIG.MAX_RADIUS_MI, next));
+    localStorage.setItem(STORAGE_KEYS.radiusMi, String(searchRadiusMi));
+    applyRadius();
+    // A different search radius needs a fresh candidate list — re-poll now, same
+    // reasoning as a row-count change.
+    if (!inBackoff) {
+      if (pollTimer) clearTimeout(pollTimer);
+      poll();
+    }
+  }
+
+  searchRadiusMi = loadRadiusMi();
+  applyRadius();
+  radiusMinus.addEventListener('click', () => setRadius(searchRadiusMi - CONFIG.RADIUS_STEP_MI));
+  radiusPlus.addEventListener('click', () => setRadius(searchRadiusMi + CONFIG.RADIUS_STEP_MI));
+
+  // ---- Settings: tracking location (ZIP) ----
+
+  async function applyZip(zip, persist) {
+    try {
+      const geo = await geocodeZip(zip);
+      trackingLocation.lat = geo.lat;
+      trackingLocation.lon = geo.lon;
+      eyebrowLocation.textContent = geo.label;
+      if (persist) localStorage.setItem(STORAGE_KEYS.zip, zip);
+      recenterMap();
+      zipStatus.textContent = `LOCATED: ${geo.label}`;
+      zipStatus.className = 'settings-status is-ok';
+      return true;
+    } catch {
+      zipStatus.textContent = 'ZIP NOT FOUND';
+      zipStatus.className = 'settings-status is-error';
+      return false;
+    }
+  }
+
+  async function handleZipSubmit() {
+    const zip = zipInput.value.trim();
+    if (!/^\d{5}$/.test(zip)) {
+      zipStatus.textContent = 'ENTER A 5-DIGIT US ZIP';
+      zipStatus.className = 'settings-status is-error';
+      return;
+    }
+    const ok = await applyZip(zip, true);
+    // A relocated board needs a fresh candidate list — re-poll now, same as a
+    // row-count change, unless we're mid-backoff.
+    if (ok && !inBackoff) {
+      if (pollTimer) clearTimeout(pollTimer);
+      poll();
+    }
+  }
+
+  zipSet.addEventListener('click', handleZipSubmit);
+  zipInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleZipSubmit();
+  });
+
+  const initialZip = loadZip();
+  zipInput.value = initialZip;
+
   tapStart.addEventListener('click', () => {
     clack.unlock();
     splash.hidden = true;
@@ -384,8 +681,11 @@ function main() {
   }, { once: true });
 
   // Load in the background — the first poll's ETA column just falls back to
-  // "--:--" for the brief window before this resolves.
+  // "--:--" for the brief window before this resolves. Same for the initial
+  // ZIP geocode: the board starts at the Edgewater default and updates once
+  // (or if) it resolves, rather than blocking the splash on a network call.
   loadAirportCoords();
+  applyZip(initialZip, false);
 }
 
 document.addEventListener('DOMContentLoaded', main);

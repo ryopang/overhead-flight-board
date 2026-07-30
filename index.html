@@ -14,17 +14,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Archivo:wght@700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
+<div class="page" id="page">
 <div class="board" id="board" aria-hidden="true">
   <header class="board-header">
     <div class="eyebrow">
       <svg class="plane-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
       <span class="eyebrow-title">OVERHEAD</span>
       <span class="eyebrow-divider">·</span>
-      <span class="eyebrow-location">EDGEWATER, NJ</span>
+      <span class="eyebrow-location" id="eyebrow-location">EDGEWATER, NJ</span>
       <span class="reconnect-badge" id="reconnect-badge" hidden>RECONNECTING&hellip;</span>
     </div>
     <div class="header-right">
@@ -36,6 +38,16 @@
   </header>
 
   <div class="settings-panel" id="settings-panel" hidden>
+    <div class="settings-row">
+      <span class="settings-label">LOCATION (ZIP)</span>
+      <div class="settings-options zip-input-group">
+        <input type="text" id="zip-input" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="07020" autocomplete="off" />
+        <button type="button" id="zip-set">SET</button>
+      </div>
+    </div>
+    <div class="settings-row settings-status-row">
+      <span class="settings-status" id="zip-status"></span>
+    </div>
     <div class="settings-row">
       <span class="settings-label">FLIP EVERY</span>
       <div class="settings-options" id="interval-options" role="group">
@@ -53,11 +65,25 @@
       </div>
     </div>
     <div class="settings-row">
+      <span class="settings-label">MAP</span>
+      <div class="settings-options">
+        <button type="button" id="map-toggle">ON</button>
+      </div>
+    </div>
+    <div class="settings-row">
       <span class="settings-label">ROWS</span>
       <div class="settings-options row-stepper">
         <button type="button" id="rows-minus" aria-label="Fewer rows">&minus;</button>
         <span class="rows-count" id="rows-count">5</span>
         <button type="button" id="rows-plus" aria-label="More rows">+</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">RADIUS (MI)</span>
+      <div class="settings-options row-stepper">
+        <button type="button" id="radius-minus" aria-label="Smaller radius">&minus;</button>
+        <span class="rows-count" id="radius-count">25</span>
+        <button type="button" id="radius-plus" aria-label="Larger radius">+</button>
       </div>
     </div>
   </div>
@@ -76,6 +102,12 @@
   </div>
 </div>
 
+<div class="map-section" id="map-section" aria-hidden="true">
+  <div id="map"></div>
+  <div class="map-radius-label" id="map-radius-label">100MI RADIUS</div>
+</div>
+</div>
+
 <div class="splash" id="splash">
   <div class="splash-inner">
     <svg class="splash-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
@@ -85,6 +117,7 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="flap.js"></script>
 <script src="audio.js"></script>
 <script src="app.js"></script>
