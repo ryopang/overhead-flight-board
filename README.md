@@ -27,6 +27,7 @@ Living near Teterboro and EWR approach paths means there's almost always somethi
 - **US-carrier accent tag** — a small green mark next to US airline flights, not a background wash.
 - **Configurable flip interval** — a settings panel (gear icon) lets you choose how often the board refreshes: 15s / 30s / 1m (default) / 2m / 5m. Persisted locally.
 - **Mute toggle** — same settings panel.
+- **Configurable row count** — 1 to 10 rows (default 5), via a stepper in the same settings panel. All 10 row slots are pre-built and shown/hidden rather than recreated, so changing the count is instant.
 - **Resilient to network drops** — if a poll fails, the board keeps showing the last known state and retries with exponential backoff, surfacing only a small "RECONNECTING…" badge rather than blanking out.
 - **In-memory route caching** — each callsign's resolved route is cached client-side for 15 minutes, so a flight seen repeatedly doesn't re-hit the route API.
 - **Kiosk-friendly** — add-to-Home-Screen manifest, full-screen display mode, a one-time "tap to start" splash that unlocks audio (required by Safari's autoplay policy) and never appears again for that session.
