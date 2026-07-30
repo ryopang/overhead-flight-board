@@ -478,6 +478,15 @@ function main() {
   let inBackoff = false;
   let flipIntervalMs = loadFlipInterval();
   let rowCount = loadRowCount();
+  // Settings changes (zip, radius, row count) all call poll() immediately rather
+  // than waiting out the flip interval. Without this guard, clicking a stepper
+  // rapidly starts overlapping in-flight poll() calls — each one eventually
+  // resolves and schedules its OWN setTimeout(poll, ...), so the polling loop
+  // silently multiplies and starts hammering adsb.lol well past its courtesy
+  // floor. Every poll() tags itself with the current generation on entry; if a
+  // newer call started (and bumped the generation) before this one's awaits
+  // resolve, this one is stale and must not render or schedule a follow-up.
+  let pollGeneration = 0;
 
   function applyRowCount() {
     boardRows.forEach((row, i) => {
@@ -502,10 +511,12 @@ function main() {
   }
 
   async function poll() {
+    const myGeneration = ++pollGeneration;
     try {
       const positions = await fetchPositions();
       const candidates = filterAndSort(positions);
       const rows = await buildBoard(candidates, rowCount);
+      if (myGeneration !== pollGeneration) return; // superseded — don't render or reschedule
       lastGoodRows = rows;
       reconnectBadge.hidden = true;
       backoffMs = CONFIG.BACKOFF_START_MS;
@@ -513,6 +524,7 @@ function main() {
       render(rows);
       pollTimer = setTimeout(poll, flipIntervalMs);
     } catch (err) {
+      if (myGeneration !== pollGeneration) return; // superseded — don't reschedule
       // Keep showing the last known board; surface only the small reconnect indicator.
       reconnectBadge.hidden = false;
       inBackoff = true;
