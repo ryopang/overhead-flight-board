@@ -10,9 +10,14 @@
 // physical-modeling technique for a plucked/struck object's natural resonance
 // (originally for guitar strings, but with a short delay + fast decay it's a
 // well-known technique for claves, wood blocks, and knocks — an actual object's
-// decaying resonance rather than a synthesized tone). That's the core of the
-// clack; a noise transient adds the attack edge, and a low sine thump adds
-// mechanical mass underneath.
+// decaying resonance rather than a synthesized tone).
+//
+// Tuning is based on actually analyzing a reference split-flap recording locally
+// (envelope + Goertzel frequency scan — see project notes): the real sound has a
+// dominant resonance around 1.1-1.3kHz, a secondary one around 800-900Hz, real
+// broadband energy up to 3-3.5kHz, and — contrary to an earlier assumption —
+// almost no energy below 200Hz. So: two co-occurring knocks at those two
+// resonances, a bright noise transient, and no low-frequency "thump" layer.
 
 class ClackPlayer {
   constructor() {
@@ -103,49 +108,38 @@ class ClackPlayer {
     if (ctx.state === 'suspended') ctx.resume();
     const t = ctx.currentTime;
     const jitter = () => 0.9 + Math.random() * 0.2;
-    // Low-midrange resonance — a real leaf snapping into place is a dull knock,
-    // not a ringing tone.
-    const knockFreq = 420 + Math.random() * 180;
+    // Dominant + secondary resonance, measured from a reference recording.
+    const knockFreqHi = 1150 + Math.random() * 200; // ~1.15-1.35kHz, the dominant peak
+    const knockFreqLo = 820 + Math.random() * 130; // ~0.8-0.95kHz, the secondary peak
 
-    // 1) Noise transient — the initial edge of the snap.
+    // 1) Noise transient — bright, broadband attack edge (reference showed real
+    //    energy up to 3-3.5kHz, not just a dull thud).
     {
       const dur = 0.006;
       const src = ctx.createBufferSource();
       src.buffer = this._noiseBuffer(ctx, dur);
       const hp = ctx.createBiquadFilter();
       hp.type = 'highpass';
-      hp.frequency.value = 2500;
+      hp.frequency.value = 2200;
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.18 * jitter(), t);
+      g.gain.setValueAtTime(0.2 * jitter(), t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
       src.connect(hp).connect(g).connect(ctx.destination);
       src.start(t);
       src.stop(t + dur);
     }
 
-    // 2) The knock — the main character of the sound.
-    this._karplusKnock(ctx, t, knockFreq, 0.55 * jitter(), 0.32 + Math.random() * 0.1, 0.04);
+    // 2) The knock — two co-occurring resonances (dominant + secondary), matching
+    //    the dual-peak character measured in the reference. No low-frequency
+    //    thump layer: the reference had essentially no energy below ~200Hz.
+    this._karplusKnock(ctx, t, knockFreqHi, 0.5 * jitter(), 0.3 + Math.random() * 0.1, 0.035);
+    this._karplusKnock(ctx, t, knockFreqLo, 0.32 * jitter(), 0.3 + Math.random() * 0.1, 0.035);
 
-    // 3) Low thump — mechanical weight/mass underneath the knock.
-    {
-      const dur = 0.025;
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(120, t);
-      osc.frequency.exponentialRampToValueAtTime(60, t + dur);
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.17 * jitter(), t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      osc.connect(g).connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + dur);
-    }
-
-    // 4) Settle knock — quieter, smaller secondary knock ~25ms later, as the
-    //    leaf bounces once against its stop before coming to rest.
+    // 3) Settle knock — quieter secondary hit ~25ms later, as the leaf bounces
+    //    once against its stop before coming to rest.
     {
       const delay = 0.022 + Math.random() * 0.006;
-      this._karplusKnock(ctx, t + delay, knockFreq * 1.2, 0.18 * jitter(), 0.28, 0.02);
+      this._karplusKnock(ctx, t + delay, knockFreqHi * 1.05, 0.16 * jitter(), 0.26, 0.02);
     }
   }
 }
