@@ -57,12 +57,10 @@ body {
 .board {
   position: relative;
   width: 100%;
-  height: 100vh;
-  /* Without this, a high row count can make the rows taller than 100vh and the
-     box grows to fit them — pushing .map-section further down the page instead
-     of staying pinned at exactly one screen. Clip instead: the board is always
-     exactly one screen, never more, regardless of row count. */
-  overflow: hidden;
+  /* Sized to its actual content (header + column headers + however many rows
+     are configured) rather than a fixed 100vh — a fixed height left a large
+     dead gap below the rows whenever the row count was small. The map section
+     immediately follows, whatever that content height turns out to be. */
   flex: 0 0 auto;
   padding: 16px 16px 12px;
   display: flex;
@@ -304,9 +302,7 @@ body {
 .rows {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  justify-content: flex-start;
+  flex: 0 0 auto;
   gap: 6px;
 }
 

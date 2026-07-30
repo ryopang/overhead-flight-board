@@ -496,9 +496,14 @@ function main() {
     rowsCountLabel.textContent = String(rowCount);
     rowsMinus.disabled = rowCount <= CONFIG.MIN_ROWS;
     rowsPlus.disabled = rowCount >= CONFIG.MAX_ROWS;
-    // The map fills whatever space is left below the rows, so a row-count change
-    // resizes it — let layout settle, then tell Leaflet its container changed.
-    if (map) setTimeout(() => map.invalidateSize(), 60);
+    // The board is sized to its content, so a row-count change moves the map's
+    // scroll position and can change its container's aspect ratio. invalidateSize()
+    // alone only repositions tiles at the CURRENT zoom — if the container's size
+    // was wrong when the zoom was last computed (e.g. right after page load,
+    // before layout settles), that wrong zoom persists and tiles render at the
+    // wrong scale. recenterMap() re-runs fitBounds too, so zoom is always
+    // recalculated fresh for whatever size the container actually is now.
+    if (map) setTimeout(() => recenterMap(), 60);
   }
   applyRowCount();
 
@@ -593,8 +598,9 @@ function main() {
     localStorage.setItem(STORAGE_KEYS.mapEnabled, String(enabled));
     paintMapToggle(enabled);
     mapSection.hidden = !enabled;
-    // Leaflet can't measure a display:none container — resize once it's visible again.
-    if (enabled && map) setTimeout(() => map.invalidateSize(), 60);
+    // Leaflet can't measure a display:none container — recompute (size AND zoom,
+    // see the comment in applyRowCount) once it's visible again.
+    if (enabled && map) setTimeout(() => recenterMap(), 60);
   }
 
   const mapEnabled = loadMapEnabled();

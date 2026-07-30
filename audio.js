@@ -1,17 +1,18 @@
 // audio.js — synthesized mechanical "clack" per flip, via Web Audio API. No audio files.
 //
-// A plain filtered-noise "clack" reads as soft/boomy. Real mechanical clicks (relay
-// contacts, hi-hats, a plastic leaf snapping past a stop) have a metallic, pitched
-// character from the object's own resonant partials — not just broadband noise.
-// This borrows the classic drum-machine hi-hat technique (see Synth Secrets' 808
-// hi-hat writeup: a bank of square oscillators tuned to inharmonic ratios, summed,
-// then band/highpass filtered with a fast envelope) and layers it with a short
-// noise transient for the attack and a brief low thump for mechanical weight.
+// First attempt used a bank of tuned square oscillators (the classic 808 hi-hat
+// technique) for the resonant body of the sound. That reads as a musical *tone* —
+// too clean, too "electronic" — because summed oscillators is fundamentally a
+// technique for pitched percussion, not for an object physically hitting a stop.
 //
-// Pitch is tuned to a low-midrange "clack", not a hi-hat's bright "tick" — a
-// mechanical leaf snapping into place is a dull, low-pitched sound, not shrill.
-
-const INHARMONIC_RATIOS = [1, 1.34, 1.62, 2.02, 2.41];
+// This version uses Karplus-Strong synthesis instead: a short noise burst excites
+// a feedback delay line with a lowpass filter in the loop, which is the standard
+// physical-modeling technique for a plucked/struck object's natural resonance
+// (originally for guitar strings, but with a short delay + fast decay it's a
+// well-known technique for claves, wood blocks, and knocks — an actual object's
+// decaying resonance rather than a synthesized tone). That's the core of the
+// clack; a noise transient adds the attack edge, and a low sine thump adds
+// mechanical mass underneath.
 
 class ClackPlayer {
   constructor() {
@@ -41,37 +42,56 @@ class ClackPlayer {
     return buffer;
   }
 
-  /** Metallic tick: inharmonic square-oscillator bank -> bandpass -> highpass -> fast AD envelope. */
-  _metallicTick(ctx, t, baseFreq, gainPeak, dur) {
-    const bus = ctx.createGain();
-    bus.gain.value = 1;
+  /**
+   * Karplus-Strong knock: noise burst -> feedback delay loop (with a lowpass
+   * filter damping each pass) -> fast decay. Reads as a physical object's brief
+   * resonance, not a musical tone. `feedback` close to 0 = a couple of quick
+   * decaying bounces (a knock); explicitly disconnected after `dur` since a
+   * delay/gain feedback loop otherwise keeps processing (near-silent) forever.
+   */
+  _karplusKnock(ctx, t, freq, gainPeak, feedback, dur) {
+    const delayTime = 1 / freq;
+    const exciteDur = delayTime * 1.5;
 
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = baseFreq * 1.7;
-    bp.Q.value = 0.8;
+    const src = ctx.createBufferSource();
+    src.buffer = this._noiseBuffer(ctx, exciteDur);
 
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = Math.max(300, baseFreq * 0.6);
+    const delay = ctx.createDelay(0.05);
+    delay.delayTime.value = delayTime;
+
+    const damping = ctx.createBiquadFilter();
+    damping.type = 'lowpass';
+    damping.frequency.value = freq * 3.5;
+
+    const feedbackGain = ctx.createGain();
+    feedbackGain.gain.value = feedback;
 
     const env = ctx.createGain();
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(gainPeak, t + 0.001);
+    env.gain.setValueAtTime(gainPeak, t);
     env.gain.exponentialRampToValueAtTime(0.001, t + dur);
 
-    bus.connect(bp).connect(hp).connect(env).connect(ctx.destination);
+    // Excitation into the loop, loop feeds back through the damping filter,
+    // and the damped signal is tapped out through its own envelope.
+    src.connect(delay);
+    delay.connect(damping);
+    damping.connect(feedbackGain);
+    feedbackGain.connect(delay);
+    damping.connect(env);
+    env.connect(ctx.destination);
 
-    for (const ratio of INHARMONIC_RATIOS) {
-      const osc = ctx.createOscillator();
-      osc.type = 'square';
-      osc.frequency.value = baseFreq * ratio;
-      const oscGain = ctx.createGain();
-      oscGain.gain.value = 1 / INHARMONIC_RATIOS.length;
-      osc.connect(oscGain).connect(bus);
-      osc.start(t);
-      osc.stop(t + dur);
-    }
+    src.start(t);
+
+    const cleanupMs = (dur + 0.05) * 1000;
+    setTimeout(() => {
+      try {
+        delay.disconnect();
+        damping.disconnect();
+        feedbackGain.disconnect();
+        env.disconnect();
+      } catch {
+        // already disconnected — nothing to do
+      }
+    }, cleanupMs);
   }
 
   clack() {
@@ -83,50 +103,49 @@ class ClackPlayer {
     if (ctx.state === 'suspended') ctx.resume();
     const t = ctx.currentTime;
     const jitter = () => 0.9 + Math.random() * 0.2;
-    // Low-midrange, not a hi-hat's bright tick — a real leaf snapping into place
-    // is a dull, low-pitched clack.
-    const baseFreq = 650 + Math.random() * 250;
+    // Low-midrange resonance — a real leaf snapping into place is a dull knock,
+    // not a ringing tone.
+    const knockFreq = 420 + Math.random() * 180;
 
-    // 1) Noise transient — the initial edge of the snap, under the metallic tone.
+    // 1) Noise transient — the initial edge of the snap.
     {
-      const dur = 0.007;
+      const dur = 0.006;
       const src = ctx.createBufferSource();
       src.buffer = this._noiseBuffer(ctx, dur);
       const hp = ctx.createBiquadFilter();
       hp.type = 'highpass';
-      hp.frequency.value = 2200;
+      hp.frequency.value = 2500;
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.2 * jitter(), t);
+      g.gain.setValueAtTime(0.18 * jitter(), t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
       src.connect(hp).connect(g).connect(ctx.destination);
       src.start(t);
       src.stop(t + dur);
     }
 
-    // 2) Metallic tick — the main character of the sound.
-    this._metallicTick(ctx, t, baseFreq, 0.5 * jitter(), 0.05);
+    // 2) The knock — the main character of the sound.
+    this._karplusKnock(ctx, t, knockFreq, 0.55 * jitter(), 0.32 + Math.random() * 0.1, 0.04);
 
-    // 3) Low thump — mechanical weight/mass. A bit more prominent than a hi-hat's
-    //    tick would need, since this is meant to read as a "clack" not a "tick".
+    // 3) Low thump — mechanical weight/mass underneath the knock.
     {
       const dur = 0.025;
       const osc = ctx.createOscillator();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(130, t);
-      osc.frequency.exponentialRampToValueAtTime(65, t + dur);
+      osc.frequency.setValueAtTime(120, t);
+      osc.frequency.exponentialRampToValueAtTime(60, t + dur);
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.16 * jitter(), t);
+      g.gain.setValueAtTime(0.17 * jitter(), t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
       osc.connect(g).connect(ctx.destination);
       osc.start(t);
       osc.stop(t + dur);
     }
 
-    // 4) Settle tick — quieter secondary metallic tick ~25ms later, as the leaf
-    //    bounces once against its stop before coming to rest.
+    // 4) Settle knock — quieter, smaller secondary knock ~25ms later, as the
+    //    leaf bounces once against its stop before coming to rest.
     {
       const delay = 0.022 + Math.random() * 0.006;
-      this._metallicTick(ctx, t + delay, baseFreq * 1.15, 0.16 * jitter(), 0.022);
+      this._karplusKnock(ctx, t + delay, knockFreq * 1.2, 0.18 * jitter(), 0.28, 0.02);
     }
   }
 }
