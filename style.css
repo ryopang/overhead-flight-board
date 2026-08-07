@@ -527,10 +527,12 @@ body {
 
 .single-content {
   flex: 1 1 auto;
+  min-height: 0; /* allow this flex child to shrink below its content's natural size */
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px clamp(24px, 6vw, 96px);
+  overflow: hidden;
   /* LED-panel dot grid across the whole sign, echoing the physical matrix the
      reference photo was shot on. */
   background-image: radial-gradient(rgba(245, 245, 240, 0.16) 1.3px, transparent 1.4px);
@@ -543,11 +545,14 @@ body {
 
 /* SINGLE view fills the whole screen (e.g. iPad landscape) like a standalone
    departure sign, rather than sizing to its content the way the multi-row board
-   does — .board grows to one full viewport and single-content, as its only
+   does — .board is pinned to exactly one viewport (not just min-height, so a
+   long destination name's 3-line clamp plus the info block above it can never
+   push the sign past the screen's bottom edge) and single-content, as its only
    flexed child once board-content is hidden, stretches to fill what's left
    under the header. */
 .page.mode-single .board {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .single-card {
@@ -643,6 +648,14 @@ body {
   font-size: clamp(44px, 11vw, 128px);
   line-height: 1.1;
   text-shadow: 0 0 18px rgba(245, 245, 240, 0.3);
+  /* Long destination names (e.g. "Barnstable Municipal Boardman Polando Field")
+     can run past 3 lines at this font size and push past the screen's bottom
+     edge — clamp to 3 lines with an ellipsis rather than letting it overflow. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 
 /* ---------------- Map ---------------- */

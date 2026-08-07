@@ -537,6 +537,37 @@ function formatTelemetry(row) {
   return [altPart, spdPart].filter(Boolean).join(' · ');
 }
 
+// A long destination name (e.g. "Barnstable Municipal Boardman Polando Field")
+// at the CSS clamp's large default size can run past 3 lines and, combined with
+// the info block above it, push the whole sign past one screen's height. Rather
+// than picking a single small font size that would also shrink ordinary short
+// names (most flights), only shrink when the text actually needs it: reset to
+// the CSS default, then step the font size down until it fits within 3 lines.
+// el.scrollHeight reflects the full unclamped content height (the CSS
+// -webkit-line-clamp only affects what's visually painted), so it's a reliable
+// measure of how many lines the text would take at the current font size.
+const DEST_MIN_FONT_PX = 30;
+const DEST_FONT_STEP_PX = 4;
+
+function fitDestinationText(el) {
+  el.style.fontSize = '';
+  const lineCount = () => {
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 1;
+    return Math.round(el.scrollHeight / lineHeight);
+  };
+  let guard = 0;
+  while (lineCount() > 3 && guard < 30) {
+    const current = parseFloat(getComputedStyle(el).fontSize);
+    const next = current - DEST_FONT_STEP_PX;
+    if (next < DEST_MIN_FONT_PX) {
+      el.style.fontSize = `${DEST_MIN_FONT_PX}px`;
+      break;
+    }
+    el.style.fontSize = `${next}px`;
+    guard++;
+  }
+}
+
 let singleLogoRequestId = 0;
 
 function updateSingleView(refs, row) {
@@ -548,6 +579,7 @@ function updateSingleView(refs, row) {
   const destIata = row ? row.route.split('→')[1] : null;
   const dest = row ? row.destinationAirportName || row.destinationCity || destIata : null;
   refs.dest.textContent = dest || '—';
+  fitDestinationText(refs.dest);
 
   const myRequest = ++singleLogoRequestId;
   const drawPlaneFallback = () => {
