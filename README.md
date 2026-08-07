@@ -4,6 +4,11 @@ A split-flap airport departure board, running in a browser, showing the commerci
 
 ![status](https://img.shields.io/badge/status-personal%20project-informational)
 
+
+<img width="1175" height="1162" alt="Screenshot 2026-07-30 at 2 44 35 PM" src="https://github.com/user-attachments/assets/2f886bd3-a0ce-45dc-9ea4-ca2228424e52" />
+
+
+
 ## What this is
 
 Enter any US ZIP code and it polls free public flight-tracking APIs, filters the aircraft nearby down to commercial airline traffic, and renders the nearest as split-flap board rows — flight number, airline (with logo), route, estimated arrival time. New flights flip in, old ones flip out, character by character, with a synthesized mechanical clack. Scroll down and a live map shows the same flights plotted over a wide area around your location.
