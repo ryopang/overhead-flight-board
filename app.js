@@ -413,18 +413,56 @@ function drawDotMatrixLogo(canvas, source) {
   octx.drawImage(source, (LOGO_DOT_COLS - dw) / 2, (LOGO_DOT_ROWS - dh) / 2, dw, dh);
   const data = octx.getImageData(0, 0, LOGO_DOT_COLS, LOGO_DOT_ROWS).data;
 
+  // Real airline logos (from images.kiwi.com) ship as fully-opaque "app icon"
+  // squares — a white/light rounded background with the airline's mark on top —
+  // not a transparent silhouette. Sampling alpha alone (as if every logo were a
+  // silhouette) lit up the *entire* square as one solid block. Detect which kind
+  // of source this is by sampling the SOURCE image alone, filling its own small
+  // canvas with no contain-fit padding — the padding added above is itself fully
+  // transparent, so checking alpha on the padded sample would always see some
+  // transparency and misdetect every image as a silhouette.
+  const probe = document.createElement('canvas');
+  probe.width = 8;
+  probe.height = 8;
+  const probeCtx = probe.getContext('2d');
+  probeCtx.drawImage(source, 0, 0, 8, 8);
+  const probeData = probeCtx.getImageData(0, 0, 8, 8).data;
+  let minSourceAlpha = 255;
+  for (let i = 3; i < probeData.length; i += 4) {
+    if (probeData[i] < minSourceAlpha) minSourceAlpha = probeData[i];
+  }
+  const isOpaqueIcon = minSourceAlpha > 250;
+
   const cellW = w / LOGO_DOT_COLS;
   const cellH = h / LOGO_DOT_ROWS;
   for (let y = 0; y < LOGO_DOT_ROWS; y++) {
     for (let x = 0; x < LOGO_DOT_COLS; x++) {
-      const alpha = data[(y * LOGO_DOT_COLS + x) * 4 + 3] / 255;
-      if (alpha < 0.12) continue;
+      const idx = (y * LOGO_DOT_COLS + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const alpha = data[idx + 3] / 255;
+      if (alpha < 0.05) continue; // outside the contain-fit area (our own padding)
+
+      let intensity;
+      let fillColor;
+      if (isOpaqueIcon) {
+        const whiteness = (r + g + b) / (3 * 255); // 1 = white, 0 = black
+        if (whiteness > 0.86) continue; // the icon's background chip — skip it
+        intensity = 1 - whiteness;
+        fillColor = `rgba(${r}, ${g}, ${b}, ${0.6 + 0.4 * intensity})`;
+      } else {
+        if (alpha < 0.12) continue;
+        intensity = alpha;
+        fillColor = `rgba(255, 255, 255, ${0.5 + 0.5 * alpha})`;
+      }
+
       const cx = x * cellW + cellW / 2;
       const cy = y * cellH + cellH / 2;
-      const radius = (Math.min(cellW, cellH) / 2) * 0.68 * Math.max(alpha, 0.6);
+      const radius = (Math.min(cellW, cellH) / 2) * 0.68 * Math.max(intensity, 0.6);
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + 0.5 * alpha})`;
+      ctx.fillStyle = fillColor;
       ctx.fill();
     }
   }
