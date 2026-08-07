@@ -29,18 +29,23 @@ Living near Teterboro and EWR approach paths means there's almost always somethi
 - **Mechanical clack per flip** — plays a short (110ms) sample (`clack.wav`, provided directly by the project owner and confirmed clear of copyright concerns) through Web Audio API, so overlapping staggered hits across a row layer correctly, with small per-hit pitch/gain jitter so a cascade doesn't sound like the same sample looped identically. Falls back to an in-browser synthesized knock (Karplus-Strong physical modeling) if the sample fails to load. Mutable in settings.
 - **7-segment clock** in the corner, CSS-drawn (ghost segments visible when off, like a real LCD), deliberately styled differently from the flap-cell font so it doesn't read as part of the animated board.
 - **US-carrier accent tag** — a small green mark next to US airline flights, not a background wash.
-- **Live map view** — a second full-screen section below the board (reached by scrolling down, never squeezed into the same screen), showing the same flights on a dark map centered on your tracked location with a 100-mile-radius reference circle, pan/zoom enabled. Collapsible via a MAP on/off toggle in settings.
+- **Live map view** — a second full-screen section below the board (reached by scrolling down, never squeezed into the same screen), showing the same flights on a dark map centered on your tracked location with a 100-mile-radius reference circle, pan/zoom enabled. Collapsible via a MAP on/off toggle in settings, with its own on/off default per view mode (see below).
+- **Two view modes, switchable in settings (VIEW: BOARD / SINGLE)** — the choice persists locally:
+  - **BOARD** — the original multi-row split-flap list described above.
+  - **SINGLE** — a large single-flight departure-sign display, styled after a physical LED dot-matrix sign: the nearest overhead flight's number, route, aircraft type, live altitude/ground speed (e.g. `FL350 · 462 KTS`, from the same position data already being polled), and a big "Departing to &lt;destination&gt;" line, all rendered in a true round-dot variable font (Doto) over a faint LED-panel dot-grid backdrop. The airline logo is rendered the same way — sampled onto a dot grid rather than shown as a plain bitmap — with a dot-matrix plane glyph as the fallback when no logo resolves. Fills the screen edge-to-edge, kiosk-style. The map defaults **off** in this view (vs. on for BOARD) since the sign is meant to stand alone, but each view remembers its own on/off choice independently once you touch the toggle.
 - **Configurable flip interval** — 15s / 30s / 1m (default) / 2m / 5m, in settings.
 - **Configurable row count** — 1 to 10 rows (default 5). All 10 row slots are pre-built and shown/hidden rather than recreated, so changing the count is instant.
 - **Resilient to network drops** — if a poll fails, the board keeps showing the last known state and retries with exponential backoff, surfacing only a small "RECONNECTING…" badge rather than blanking out.
 - **In-memory route caching** — each callsign's resolved route is cached client-side for 15 minutes, so a flight seen repeatedly doesn't re-hit the route API.
 - **Kiosk-friendly** — add-to-Home-Screen manifest, full-screen display mode, a one-time "tap to start" splash that unlocks audio (required by Safari's autoplay policy) and never appears again for that session. The board itself always fills exactly one screen regardless of row count; the map is a deliberate second screen, not a squeeze-everything-in compromise.
 
-All settings (location, radius, flip interval, sound, row count, map on/off) persist locally and apply immediately without a page reload.
+All settings (view mode, location, radius, flip interval, sound, row count, map on/off) persist locally and apply immediately without a page reload.
 
 ## Design intent
 
 Built to match a specific reference photo, not a generic idea of "split-flap board": black chassis, individually bordered amber character cells, bold white uppercase headers, a visually distinct 7-segment clock. IBM Plex Mono for the flap characters, Archivo for headers. The flip is the signature element — everything else on the board is intentionally static. No hover states, no decorative motion, no page-load flourish beyond the same flip mechanic the board uses forever after. The map is the one deliberate exception to "nothing else moves" — it's a live, pannable/zoomable geographic view, kept on its own screen precisely so it doesn't compete with the board's stillness.
+
+The SINGLE view is matched to a second, different reference photo — a physical LED dot-matrix departure sign — and deliberately doesn't reuse the board's amber flap-cell look: white text, Doto (a round-dot variable font) instead of IBM Plex Mono, and a sampled dot-matrix rendering of the airline logo instead of a plain image, so the whole sign reads as one consistent dot-matrix material rather than sharp UI elements dropped onto a pixelated background.
 
 ## Considerations / constraints
 
@@ -55,7 +60,7 @@ Built to match a specific reference photo, not a generic idea of "split-flap boa
 
 ## Stack
 
-Plain HTML / CSS / JavaScript, plus [Leaflet](https://leafletjs.com) (loaded via CDN) for the map. No framework, no build step, no bundler — deployable as static files with four serverless functions in `api/` for CORS proxying. Runs locally via a dependency-free Node dev server (`dev-server.mjs`) that mirrors the same routes.
+Plain HTML / CSS / JavaScript, plus [Leaflet](https://leafletjs.com) (loaded via CDN) for the map. Fonts are loaded from Google Fonts: IBM Plex Mono and Archivo for the board, [Doto](https://fonts.google.com/specimen/Doto) (a round-dot variable font) for the SINGLE view. No framework, no build step, no bundler — deployable as static files with four serverless functions in `api/` for CORS proxying. Runs locally via a dependency-free Node dev server (`dev-server.mjs`) that mirrors the same routes.
 
 ## Running locally
 

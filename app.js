@@ -26,7 +26,13 @@ const STORAGE_KEYS = {
   zip: 'overhead:zip',
   radiusMi: 'overhead:radiusMi',
   mapEnabled: 'overhead:mapEnabled',
+  mapEnabledSingle: 'overhead:mapEnabledSingle',
+  displayMode: 'overhead:displayMode',
 };
+
+function loadDisplayMode() {
+  return localStorage.getItem(STORAGE_KEYS.displayMode) === 'single' ? 'single' : 'board';
+}
 
 function loadFlipInterval() {
   const stored = Number(localStorage.getItem(STORAGE_KEYS.flipInterval));
@@ -50,11 +56,6 @@ function loadZip() {
 function loadRadiusMi() {
   const stored = Number(localStorage.getItem(STORAGE_KEYS.radiusMi));
   return stored >= CONFIG.MIN_RADIUS_MI && stored <= CONFIG.MAX_RADIUS_MI ? stored : CONFIG.DEFAULT_RADIUS_MI;
-}
-
-function loadMapEnabled() {
-  const stored = localStorage.getItem(STORAGE_KEYS.mapEnabled);
-  return stored === null ? true : stored === 'true'; // default on
 }
 
 const MI_PER_NM = 1.15078;
@@ -81,6 +82,37 @@ async function geocodeZip(zip) {
 }
 
 const FIELD_WIDTHS = { flight: 7, airline: 18, route: 7, eta: 5 };
+
+// ICAO aircraft type designator -> friendly model name, for the single-flight view's
+// "737-900" style line. adsb.lol gives us the ICAO code (ac.t) directly; adsbdb/
+// airports.json don't carry a friendly name, so this is a small local lookup table
+// covering common airline fleet types rather than pulling in another API. Unknown
+// codes just fall back to the raw ICAO designator.
+const AIRCRAFT_TYPE_NAMES = {
+  B737: '737-700', B738: '737-800', B739: '737-900', B37M: '737 MAX 7', B38M: '737 MAX 8', B39M: '737 MAX 9',
+  B752: '757-200', B753: '757-300', B762: '767-200', B763: '767-300', B764: '767-400',
+  B772: '777-200', B77L: '777-200LR', B773: '777-300', B77W: '777-300ER',
+  B788: '787-8', B789: '787-9', B78X: '787-10',
+  A319: 'A319', A320: 'A320', A321: 'A321', A20N: 'A320neo', A21N: 'A321neo', A318: 'A318',
+  A332: 'A330-200', A333: 'A330-300', A339: 'A330-900neo', A359: 'A350-900', A35K: 'A350-1000', A388: 'A380-800',
+  CRJ2: 'CRJ-200', CRJ7: 'CRJ-700', CRJ9: 'CRJ-900', CRJX: 'CRJ-1000',
+  E145: 'ERJ-145', E170: 'E170', E75L: 'E175', E75S: 'E175', E190: 'E190', E195: 'E195',
+  DH8D: 'Dash 8-400',
+};
+
+function formatAircraftType(icaoType) {
+  if (!icaoType) return null;
+  const code = icaoType.trim().toUpperCase();
+  return AIRCRAFT_TYPE_NAMES[code] || code;
+}
+
+// Strips the generic "International Airport" / "Airport" suffix so a route lookup's
+// full destination name reads like a departure-sign line, e.g. "Phoenix Sky Harbor
+// International Airport" -> "Phoenix Sky Harbor".
+function formatAirportName(name) {
+  if (!name) return null;
+  return name.replace(/\s+International Airport$/i, '').replace(/\s+Airport$/i, '').trim();
+}
 
 // ---------------- Airport coordinates (for arrival-time estimate) ----------------
 //
@@ -156,6 +188,8 @@ async function resolveRoute(callsign) {
           countryIso: fr.airline && fr.airline.country_iso,
           origin: (fr.origin && fr.origin.iata_code) || '---',
           destination: (fr.destination && fr.destination.iata_code) || '---',
+          destinationName: (fr.destination && fr.destination.name) || null,
+          destinationMunicipality: (fr.destination && fr.destination.municipality) || null,
         }
       : null;
     routeCache.set(callsign, { data, ts: Date.now() });
@@ -240,6 +274,11 @@ async function buildBoard(candidates, rowCount) {
       lat: ac.lat,
       lon: ac.lon,
       track: ac.dir,
+      type: formatAircraftType(ac.t),
+      destinationAirportName: formatAirportName(route.destinationName),
+      destinationCity: route.destinationMunicipality || null,
+      altitudeFt: typeof ac.alt_baro === 'number' ? ac.alt_baro : null,
+      groundSpeedKt: typeof ac.gs === 'number' ? ac.gs : null,
     });
   }
   return rows;
@@ -331,6 +370,129 @@ class BoardRow {
       this.logoImg.classList.remove('is-loaded');
       this.logoImg.removeAttribute('src');
     }
+  }
+}
+
+// ---------------- Single-flight view ----------------
+//
+// Alternate to the split-flap board, selectable via Settings > VIEW. Shows just
+// the nearest overhead flight (rows[0] from the same poll loop that feeds the
+// board) as a departure-sign-style card. Purely a second renderer over the same
+// data — doesn't touch board rendering or polling.
+
+// The logo box renders as a dot-matrix grid (round dots, sampled from the source
+// image's alpha) rather than a plain <img>, so it reads as part of the same
+// LED-sign material as the .dot-font text next to it instead of a smooth bitmap
+// dropped into a pixelated scene.
+
+// 20x20 (up from an earlier 14x14) — the logo box got considerably bigger when
+// the single view was scaled up to fill the screen, and the coarser grid was
+// losing too much of the actual airline mark's shape at that size.
+const LOGO_DOT_COLS = 20;
+const LOGO_DOT_ROWS = 20;
+
+function drawDotMatrixLogo(canvas, source) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Sample the source into a small offscreen canvas first (contain-fit, like
+  // object-fit: contain) — that low-res sampling is what produces the dot grid,
+  // rather than trying to pixelate at full resolution.
+  const off = document.createElement('canvas');
+  off.width = LOGO_DOT_COLS;
+  off.height = LOGO_DOT_ROWS;
+  const octx = off.getContext('2d');
+  const srcW = source.naturalWidth || source.width;
+  const srcH = source.naturalHeight || source.height;
+  if (!srcW || !srcH) return; // broken/zero-size source — leave the canvas cleared
+  const fit = Math.min((LOGO_DOT_COLS * 0.86) / srcW, (LOGO_DOT_ROWS * 0.86) / srcH);
+  const dw = srcW * fit;
+  const dh = srcH * fit;
+  octx.drawImage(source, (LOGO_DOT_COLS - dw) / 2, (LOGO_DOT_ROWS - dh) / 2, dw, dh);
+  const data = octx.getImageData(0, 0, LOGO_DOT_COLS, LOGO_DOT_ROWS).data;
+
+  const cellW = w / LOGO_DOT_COLS;
+  const cellH = h / LOGO_DOT_ROWS;
+  for (let y = 0; y < LOGO_DOT_ROWS; y++) {
+    for (let x = 0; x < LOGO_DOT_COLS; x++) {
+      const alpha = data[(y * LOGO_DOT_COLS + x) * 4 + 3] / 255;
+      if (alpha < 0.12) continue;
+      const cx = x * cellW + cellW / 2;
+      const cy = y * cellH + cellH / 2;
+      const radius = (Math.min(cellW, cellH) / 2) * 0.68 * Math.max(alpha, 0.6);
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + 0.5 * alpha})`;
+      ctx.fill();
+    }
+  }
+}
+
+// Fallback source when a flight has no resolvable airline logo — a plain plane
+// glyph, rasterized once and reused as the dot-matrix sampling source so the
+// placeholder is made of the same dots as a real logo rather than a smooth SVG.
+let planeSilhouetteImg = null;
+function getPlaneSilhouette() {
+  if (planeSilhouetteImg) return Promise.resolve(planeSilhouetteImg);
+  return new Promise((resolve) => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+      '<path fill="#ffffff" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>';
+    const img = new Image();
+    img.onload = () => {
+      planeSilhouetteImg = img;
+      resolve(img);
+    };
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  });
+}
+
+// altitudeFt/groundSpeedKt come straight from adsb.lol's raw ADS-B report
+// (alt_baro, gs) — shown only in the single-flight view, formatted like a
+// cockpit/ATC readout ("FL350 · 462 KTS").
+function formatTelemetry(row) {
+  if (!row) return '—';
+  const altPart =
+    row.altitudeFt != null ? `FL${Math.round(row.altitudeFt / 100)}` : null;
+  const spdPart = row.groundSpeedKt != null ? `${Math.round(row.groundSpeedKt)} KTS` : null;
+  if (!altPart && !spdPart) return '—';
+  return [altPart, spdPart].filter(Boolean).join(' · ');
+}
+
+let singleLogoRequestId = 0;
+
+function updateSingleView(refs, row) {
+  refs.flight.textContent = row ? row.flight : '—';
+  refs.route.textContent = row ? row.route.replace('→', '-') : '—';
+  refs.type.textContent = row && row.type ? row.type : '—';
+  refs.telemetry.textContent = formatTelemetry(row);
+
+  const destIata = row ? row.route.split('→')[1] : null;
+  const dest = row ? row.destinationAirportName || row.destinationCity || destIata : null;
+  refs.dest.textContent = dest || '—';
+
+  const myRequest = ++singleLogoRequestId;
+  const drawPlaneFallback = () => {
+    getPlaneSilhouette().then((img) => {
+      if (myRequest !== singleLogoRequestId) return;
+      drawDotMatrixLogo(refs.logoCanvas, img);
+    });
+  };
+  if (row && row.logoUrl) {
+    const img = new Image();
+    img.onload = () => {
+      if (myRequest !== singleLogoRequestId) return; // superseded by a newer row
+      drawDotMatrixLogo(refs.logoCanvas, img);
+    };
+    img.onerror = () => {
+      if (myRequest !== singleLogoRequestId) return;
+      drawPlaneFallback();
+    };
+    img.src = row.logoUrl;
+  } else {
+    drawPlaneFallback();
   }
 }
 
@@ -467,6 +629,18 @@ function main() {
   const zipStatus = document.getElementById('zip-status');
   const eyebrowLocation = document.getElementById('eyebrow-location');
   const fullscreenToggle = document.getElementById('fullscreen-toggle');
+  const pageEl = document.getElementById('page');
+  const boardContent = document.getElementById('board-content');
+  const singleContent = document.getElementById('single-content');
+  const viewModeOptions = document.getElementById('view-mode-options');
+  const singleViewRefs = {
+    flight: document.getElementById('single-flight'),
+    route: document.getElementById('single-route'),
+    type: document.getElementById('single-type'),
+    telemetry: document.getElementById('single-telemetry'),
+    dest: document.getElementById('single-departing-dest'),
+    logoCanvas: document.getElementById('single-logo-canvas'),
+  };
 
   initClock(clockEl);
   initMap();
@@ -517,6 +691,7 @@ function main() {
       boardRows[i].setData(rows[i] || null, () => clack.clack());
     }
     updateMapFlights(rows);
+    updateSingleView(singleViewRefs, rows[0] || null);
   }
 
   async function poll() {
@@ -591,7 +766,20 @@ function main() {
   });
 
   // ---- Settings: map on/off (collapsible — reached by scrolling below the
-  // always-full-screen board, never squeezed into it) ----
+  // always-full-screen board, never squeezed into it). The on/off preference is
+  // tracked separately per view mode: BOARD still defaults ON (unchanged), SINGLE
+  // defaults OFF (it's meant to fill the screen on its own, kiosk-style) — each
+  // remembers its own last choice independently once the user touches the toggle. ----
+
+  function mapStorageKeyFor(mode) {
+    return mode === 'single' ? STORAGE_KEYS.mapEnabledSingle : STORAGE_KEYS.mapEnabled;
+  }
+
+  function loadMapEnabledFor(mode) {
+    const stored = localStorage.getItem(mapStorageKeyFor(mode));
+    if (stored !== null) return stored === 'true';
+    return mode !== 'single'; // board: default on; single: default off
+  }
 
   function paintMapToggle(enabled) {
     mapToggle.textContent = enabled ? 'ON' : 'OFF';
@@ -599,7 +787,7 @@ function main() {
   }
 
   function setMapEnabled(enabled) {
-    localStorage.setItem(STORAGE_KEYS.mapEnabled, String(enabled));
+    localStorage.setItem(mapStorageKeyFor(displayMode), String(enabled));
     paintMapToggle(enabled);
     mapSection.hidden = !enabled;
     // Leaflet can't measure a display:none container — recompute (size AND zoom,
@@ -607,10 +795,34 @@ function main() {
     if (enabled && map) setTimeout(() => recenterMap(), 60);
   }
 
-  const mapEnabled = loadMapEnabled();
-  paintMapToggle(mapEnabled);
-  mapSection.hidden = !mapEnabled;
   mapToggle.addEventListener('click', () => setMapEnabled(mapSection.hidden));
+
+  // ---- Settings: view mode (BOARD split-flap list vs SINGLE flight departure-sign
+  // card) — both render off the same poll loop/data, this just toggles which
+  // content element inside .board is visible. Switching modes also restores that
+  // mode's own map on/off preference (see above) and, for SINGLE, stretches the
+  // board chassis to fill the screen (see .page.mode-single in style.css). ----
+
+  let displayMode = loadDisplayMode();
+
+  function applyDisplayMode() {
+    boardContent.hidden = displayMode !== 'board';
+    singleContent.hidden = displayMode !== 'single';
+    pageEl.classList.toggle('mode-single', displayMode === 'single');
+    viewModeOptions.querySelectorAll('button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.mode === displayMode);
+    });
+    setMapEnabled(loadMapEnabledFor(displayMode));
+  }
+  applyDisplayMode();
+
+  viewModeOptions.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-mode]');
+    if (!btn) return;
+    displayMode = btn.dataset.mode;
+    localStorage.setItem(STORAGE_KEYS.displayMode, displayMode);
+    applyDisplayMode();
+  });
 
   // ---- Display: fullscreen (hides Safari's URL bar/toolbar chrome) ----
   //

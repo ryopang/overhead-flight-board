@@ -13,7 +13,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Archivo:wght@700;800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Archivo:wght@700;800&family=Doto:wght@700..900&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -38,6 +38,13 @@
   </header>
 
   <div class="settings-panel" id="settings-panel" hidden>
+    <div class="settings-row">
+      <span class="settings-label">VIEW</span>
+      <div class="settings-options" id="view-mode-options" role="group">
+        <button type="button" data-mode="board">BOARD</button>
+        <button type="button" data-mode="single">SINGLE</button>
+      </div>
+    </div>
     <div class="settings-row">
       <span class="settings-label">LOCATION (ZIP)</span>
       <div class="settings-options zip-input-group">
@@ -94,17 +101,39 @@
     </div>
   </div>
 
-  <div class="column-headers">
-    <span class="col col-flight">FLIGHT</span>
-    <span class="col col-airline">AIRLINE</span>
-    <span class="col col-route">ROUTE</span>
-    <span class="col col-eta">ARR EST</span>
+  <div class="board-content" id="board-content">
+    <div class="column-headers">
+      <span class="col col-flight">FLIGHT</span>
+      <span class="col col-airline">AIRLINE</span>
+      <span class="col col-route">ROUTE</span>
+      <span class="col col-eta">ARR EST</span>
+    </div>
+
+    <div class="rows" id="rows"></div>
+
+    <div class="empty-state" id="empty-state" hidden>
+      <span>NO COMMERCIAL TRAFFIC OVERHEAD</span>
+    </div>
   </div>
 
-  <div class="rows" id="rows"></div>
-
-  <div class="empty-state" id="empty-state" hidden>
-    <span>NO COMMERCIAL TRAFFIC OVERHEAD</span>
+  <div class="single-content" id="single-content" hidden>
+    <div class="single-card">
+      <div class="single-top">
+        <div class="single-logo-box" id="single-logo-box">
+          <canvas class="single-logo-canvas" id="single-logo-canvas" width="160" height="160"></canvas>
+        </div>
+        <div class="single-info">
+          <div class="single-flight" id="single-flight">&mdash;</div>
+          <div class="single-route" id="single-route">&mdash;</div>
+          <div class="single-type" id="single-type">&mdash;</div>
+          <div class="single-telemetry" id="single-telemetry">&mdash;</div>
+        </div>
+      </div>
+      <div class="single-departing">
+        <div class="single-departing-label">Departing to</div>
+        <div class="single-departing-dest" id="single-departing-dest">&mdash;</div>
+      </div>
+    </div>
   </div>
 </div>
 

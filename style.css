@@ -9,6 +9,10 @@
 
   --flap-font: 'IBM Plex Mono', ui-monospace, monospace;
   --head-font: 'Archivo', system-ui, sans-serif;
+  /* Dot-matrix / LED-sign font for the SINGLE view — a true round-dot variable
+     font (has a ROND axis, maxed out below) rather than a regular typeface,
+     to match the pixelated dot-matrix departure-sign look of the reference image. */
+  --dot-font: 'Doto', var(--flap-font);
 
   /* Cell width is the real constraint (37 characters across 4 fields per row),
      so font-size tracks width, and height derives from font-size — not the
@@ -297,6 +301,21 @@ body {
   font-size: clamp(13px, 1.4vw, 17px);
 }
 
+/* ---------------- Board content wrapper (groups column-headers/rows/empty-state
+   so the BOARD/SINGLE view toggle can hide them as one unit; purely structural —
+   the 12px gap it uses matches the gap .board previously applied directly to
+   these as top-level flex children, so original spacing is unchanged). ---------------- */
+
+.board-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.board-content[hidden] {
+  display: none;
+}
+
 /* ---------------- Rows ---------------- */
 
 .rows {
@@ -501,6 +520,130 @@ body {
 }
 
 .empty-state[hidden] { display: none; }
+
+/* ---------------- Single-flight view (alternate to the split-flap board,
+   selectable via Settings > VIEW; a white LED-sign-style "now overhead" display
+   showing just the nearest flight, styled after an airport departure sign). ---------------- */
+
+.single-content {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px clamp(24px, 6vw, 96px);
+  /* LED-panel dot grid across the whole sign, echoing the physical matrix the
+     reference photo was shot on. */
+  background-image: radial-gradient(rgba(245, 245, 240, 0.16) 1.3px, transparent 1.4px);
+  background-size: 7px 7px;
+}
+
+.single-content[hidden] {
+  display: none;
+}
+
+/* SINGLE view fills the whole screen (e.g. iPad landscape) like a standalone
+   departure sign, rather than sizing to its content the way the multi-row board
+   does — .board grows to one full viewport and single-content, as its only
+   flexed child once board-content is hidden, stretches to fill what's left
+   under the header. */
+.page.mode-single .board {
+  min-height: 100vh;
+}
+
+.single-card {
+  width: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(32px, 6vh, 72px);
+}
+
+.single-top {
+  display: flex;
+  align-items: center;
+  gap: clamp(40px, 7vw, 96px);
+}
+
+.single-logo-box {
+  position: relative;
+  width: clamp(140px, 20vw, 280px);
+  height: clamp(140px, 20vw, 280px);
+  flex: 0 0 auto;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #2563eb, #1e3a8a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.single-logo-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.single-info {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1.4vw, 16px);
+  min-width: 0;
+}
+
+.single-flight,
+.single-route,
+.single-type {
+  font-family: var(--dot-font);
+  font-variation-settings: 'ROND' 100;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--header-white);
+  font-size: clamp(36px, 8vw, 88px);
+  line-height: 1.15;
+  text-shadow: 0 0 14px rgba(245, 245, 240, 0.3);
+}
+
+.single-route,
+.single-type {
+  color: rgba(245, 245, 240, 0.78);
+  font-size: clamp(26px, 5.6vw, 58px);
+}
+
+.single-telemetry {
+  font-family: var(--dot-font);
+  font-variation-settings: 'ROND' 100;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: rgba(245, 245, 240, 0.55);
+  font-size: clamp(18px, 3.6vw, 36px);
+  line-height: 1.2;
+}
+
+.single-departing {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 1vw, 10px);
+}
+
+.single-departing-label {
+  font-family: var(--head-font);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(245, 245, 240, 0.65);
+  font-size: clamp(18px, 2.8vw, 28px);
+  text-transform: uppercase;
+}
+
+.single-departing-dest {
+  font-family: var(--dot-font);
+  font-variation-settings: 'ROND' 100;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--header-white);
+  font-size: clamp(44px, 11vw, 128px);
+  line-height: 1.1;
+  text-shadow: 0 0 18px rgba(245, 245, 240, 0.3);
+}
 
 /* ---------------- Map ---------------- */
 
