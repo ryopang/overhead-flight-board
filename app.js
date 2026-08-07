@@ -512,6 +512,9 @@ function drawDotMatrixLogo(canvas, source) {
     for (let x = 0; x < LOGO_DOT_COLS; x++) {
       const cell = y * LOGO_DOT_COLS + x;
       const idx = cell * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
       const alpha = data[idx + 3] / 255;
       if (alpha < 0.05) continue; // outside the contain-fit area (our own padding)
       if (isBackground[cell]) continue;
@@ -522,7 +525,7 @@ function drawDotMatrixLogo(canvas, source) {
       const radius = (Math.min(cellW, cellH) / 2) * 0.68 * Math.max(alpha, 0.75);
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 255, 255, ${0.55 + 0.45 * alpha})`;
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.55 + 0.45 * alpha})`;
       ctx.fill();
     }
   }
