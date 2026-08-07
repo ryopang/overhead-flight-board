@@ -385,11 +385,12 @@ class BoardRow {
 // LED-sign material as the .dot-font text next to it instead of a smooth bitmap
 // dropped into a pixelated scene.
 
-// 20x20 (up from an earlier 14x14) — the logo box got considerably bigger when
-// the single view was scaled up to fill the screen, and the coarser grid was
-// losing too much of the actual airline mark's shape at that size.
-const LOGO_DOT_COLS = 20;
-const LOGO_DOT_ROWS = 20;
+// 44x44 (up from an earlier 20x20, before that 14x14) — logos with fine detail
+// (e.g. United's globe, a network of thin curved lines) turned into unrecognizable
+// blobs at 20x20. Still reads as a dot-matrix grid, just a much denser one, so
+// enough structure survives to recognize the actual mark.
+const LOGO_DOT_COLS = 44;
+const LOGO_DOT_ROWS = 44;
 
 function drawDotMatrixLogo(canvas, source) {
   const ctx = canvas.getContext('2d');
@@ -433,24 +434,61 @@ function drawDotMatrixLogo(canvas, source) {
   }
   const isOpaqueIcon = minSourceAlpha > 250;
 
+  // For opaque icons, a flat "skip near-white pixels" rule also throws away
+  // white content that's PART of the mark — e.g. United's globe badge is a blue
+  // circle with white line art on top, and that line art is exactly as white as
+  // the icon's outer background chip. Color alone can't tell those apart; only
+  // whether a white pixel is actually CONNECTED to the image's edge can. So
+  // flood-fill "background-ish" (near-white or transparent) cells starting from
+  // the grid's border inward — cells reached that way are the real background;
+  // near-white cells enclosed by non-background content (unreachable from the
+  // edge) are left alone and drawn as part of the mark.
+  const isBackgroundish = (idx) => {
+    const a = data[idx + 3];
+    if (a < 12) return true; // our own contain-fit padding
+    if (!isOpaqueIcon) return false; // silhouette mode has no background chip to flood
+    const whiteness = (data[idx] + data[idx + 1] + data[idx + 2]) / (3 * 255);
+    return whiteness > 0.8;
+  };
+  const isBackground = new Uint8Array(LOGO_DOT_COLS * LOGO_DOT_ROWS);
+  const stack = [];
+  for (let x = 0; x < LOGO_DOT_COLS; x++) {
+    stack.push(x, LOGO_DOT_COLS * (LOGO_DOT_ROWS - 1) + x);
+  }
+  for (let y = 0; y < LOGO_DOT_ROWS; y++) {
+    stack.push(y * LOGO_DOT_COLS, y * LOGO_DOT_COLS + LOGO_DOT_COLS - 1);
+  }
+  while (stack.length) {
+    const cell = stack.pop();
+    if (isBackground[cell]) continue;
+    const cx0 = cell % LOGO_DOT_COLS;
+    const cy0 = (cell / LOGO_DOT_COLS) | 0;
+    if (!isBackgroundish(cell * 4)) continue;
+    isBackground[cell] = 1;
+    if (cx0 > 0) stack.push(cell - 1);
+    if (cx0 < LOGO_DOT_COLS - 1) stack.push(cell + 1);
+    if (cy0 > 0) stack.push(cell - LOGO_DOT_COLS);
+    if (cy0 < LOGO_DOT_ROWS - 1) stack.push(cell + LOGO_DOT_COLS);
+  }
+
   const cellW = w / LOGO_DOT_COLS;
   const cellH = h / LOGO_DOT_ROWS;
   for (let y = 0; y < LOGO_DOT_ROWS; y++) {
     for (let x = 0; x < LOGO_DOT_COLS; x++) {
-      const idx = (y * LOGO_DOT_COLS + x) * 4;
+      const cell = y * LOGO_DOT_COLS + x;
+      const idx = cell * 4;
       const r = data[idx];
       const g = data[idx + 1];
       const b = data[idx + 2];
       const alpha = data[idx + 3] / 255;
       if (alpha < 0.05) continue; // outside the contain-fit area (our own padding)
+      if (isBackground[cell]) continue;
 
       let intensity;
       let fillColor;
       if (isOpaqueIcon) {
-        const whiteness = (r + g + b) / (3 * 255); // 1 = white, 0 = black
-        if (whiteness > 0.86) continue; // the icon's background chip — skip it
-        intensity = 1 - whiteness;
-        fillColor = `rgba(${r}, ${g}, ${b}, ${0.6 + 0.4 * intensity})`;
+        intensity = 0.85;
+        fillColor = `rgba(${r}, ${g}, ${b}, 0.92)`;
       } else {
         if (alpha < 0.12) continue;
         intensity = alpha;
