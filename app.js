@@ -434,21 +434,56 @@ function drawDotMatrixLogo(canvas, source) {
   }
   const isOpaqueIcon = minSourceAlpha > 250;
 
-  // For opaque icons, a flat "skip near-white pixels" rule also throws away
-  // white content that's PART of the mark — e.g. United's globe badge is a blue
-  // circle with white line art on top, and that line art is exactly as white as
-  // the icon's outer background chip. Color alone can't tell those apart; only
-  // whether a white pixel is actually CONNECTED to the image's edge can. So
-  // flood-fill "background-ish" (near-white or transparent) cells starting from
-  // the grid's border inward — cells reached that way are the real background;
-  // near-white cells enclosed by non-background content (unreachable from the
-  // edge) are left alone and drawn as part of the mark.
+  // For opaque icons, a flat "skip near-white pixels" rule fails two ways: it
+  // throws away white content that's PART of the mark (e.g. line art drawn on
+  // top of a solid-colored badge), and it does nothing at all for logos whose
+  // background isn't white in the first place (a solid blue circle badge, say —
+  // nothing in it reads as "near white" so the entire square got painted in,
+  // which is exactly the muddy blue block this replaces). Sample the ACTUAL
+  // background color from the source image's own edge instead of assuming
+  // white — using the unpadded 8x8 `probe` canvas above, not the padded
+  // LOGO_DOT_COLS/ROWS grid, whose border cells are always our own transparent
+  // contain-fit margin rather than actual image content. Then flood-fill
+  // outward from the grid's border matching that sampled color — cells reached
+  // that way are the real background regardless of what color it is; enclosed
+  // cells of a different color (line art on a badge, letters on a white chip)
+  // are left as the mark. The mark itself is always drawn as plain white dots —
+  // this sign doesn't try to reproduce logo colors, just shape, directly on the
+  // black backdrop (no colored box behind it).
+  let bgR = 255;
+  let bgG = 255;
+  let bgB = 255;
+  if (isOpaqueIcon) {
+    let sumR = 0;
+    let sumG = 0;
+    let sumB = 0;
+    let count = 0;
+    for (let py = 0; py < 8; py++) {
+      for (let px = 0; px < 8; px++) {
+        if (py > 0 && py < 7 && px > 0 && px < 7) continue; // only the outer ring
+        const pidx = (py * 8 + px) * 4;
+        sumR += probeData[pidx];
+        sumG += probeData[pidx + 1];
+        sumB += probeData[pidx + 2];
+        count++;
+      }
+    }
+    if (count > 0) {
+      bgR = sumR / count;
+      bgG = sumG / count;
+      bgB = sumB / count;
+    }
+  }
+
+  const BG_COLOR_TOLERANCE = 60;
   const isBackgroundish = (idx) => {
     const a = data[idx + 3];
     if (a < 12) return true; // our own contain-fit padding
     if (!isOpaqueIcon) return false; // silhouette mode has no background chip to flood
-    const whiteness = (data[idx] + data[idx + 1] + data[idx + 2]) / (3 * 255);
-    return whiteness > 0.8;
+    const dr = data[idx] - bgR;
+    const dg = data[idx + 1] - bgG;
+    const db = data[idx + 2] - bgB;
+    return Math.sqrt(dr * dr + dg * dg + db * db) < BG_COLOR_TOLERANCE;
   };
   const isBackground = new Uint8Array(LOGO_DOT_COLS * LOGO_DOT_ROWS);
   const stack = [];
@@ -477,30 +512,17 @@ function drawDotMatrixLogo(canvas, source) {
     for (let x = 0; x < LOGO_DOT_COLS; x++) {
       const cell = y * LOGO_DOT_COLS + x;
       const idx = cell * 4;
-      const r = data[idx];
-      const g = data[idx + 1];
-      const b = data[idx + 2];
       const alpha = data[idx + 3] / 255;
       if (alpha < 0.05) continue; // outside the contain-fit area (our own padding)
       if (isBackground[cell]) continue;
-
-      let intensity;
-      let fillColor;
-      if (isOpaqueIcon) {
-        intensity = 0.85;
-        fillColor = `rgba(${r}, ${g}, ${b}, 0.92)`;
-      } else {
-        if (alpha < 0.12) continue;
-        intensity = alpha;
-        fillColor = `rgba(255, 255, 255, ${0.5 + 0.5 * alpha})`;
-      }
+      if (!isOpaqueIcon && alpha < 0.12) continue;
 
       const cx = x * cellW + cellW / 2;
       const cy = y * cellH + cellH / 2;
-      const radius = (Math.min(cellW, cellH) / 2) * 0.68 * Math.max(intensity, 0.6);
+      const radius = (Math.min(cellW, cellH) / 2) * 0.68 * Math.max(alpha, 0.75);
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = fillColor;
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.55 + 0.45 * alpha})`;
       ctx.fill();
     }
   }

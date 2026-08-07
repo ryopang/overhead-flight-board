@@ -574,8 +574,8 @@ body {
   width: clamp(140px, 20vw, 280px);
   height: clamp(140px, 20vw, 280px);
   flex: 0 0 auto;
-  border-radius: 16px;
-  background: linear-gradient(160deg, #2563eb, #1e3a8a);
+  /* No background chip — the dot-matrix mark sits directly on the sign's own
+     black backdrop, like the rest of the display, rather than in a colored box. */
   display: flex;
   align-items: center;
   justify-content: center;
