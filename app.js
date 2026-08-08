@@ -414,115 +414,25 @@ function drawDotMatrixLogo(canvas, source) {
   octx.drawImage(source, (LOGO_DOT_COLS - dw) / 2, (LOGO_DOT_ROWS - dh) / 2, dw, dh);
   const data = octx.getImageData(0, 0, LOGO_DOT_COLS, LOGO_DOT_ROWS).data;
 
-  // Real airline logos (from images.kiwi.com) ship as fully-opaque "app icon"
-  // squares — a white/light rounded background with the airline's mark on top —
-  // not a transparent silhouette. Sampling alpha alone (as if every logo were a
-  // silhouette) lit up the *entire* square as one solid block. Detect which kind
-  // of source this is by sampling the SOURCE image alone, filling its own small
-  // canvas with no contain-fit padding — the padding added above is itself fully
-  // transparent, so checking alpha on the padded sample would always see some
-  // transparency and misdetect every image as a silhouette.
-  const probe = document.createElement('canvas');
-  probe.width = 8;
-  probe.height = 8;
-  const probeCtx = probe.getContext('2d');
-  probeCtx.drawImage(source, 0, 0, 8, 8);
-  const probeData = probeCtx.getImageData(0, 0, 8, 8).data;
-  let minSourceAlpha = 255;
-  for (let i = 3; i < probeData.length; i += 4) {
-    if (probeData[i] < minSourceAlpha) minSourceAlpha = probeData[i];
-  }
-  const isOpaqueIcon = minSourceAlpha > 250;
-
-  // For opaque icons, a flat "skip near-white pixels" rule fails two ways: it
-  // throws away white content that's PART of the mark (e.g. line art drawn on
-  // top of a solid-colored badge), and it does nothing at all for logos whose
-  // background isn't white in the first place (a solid blue circle badge, say —
-  // nothing in it reads as "near white" so the entire square got painted in,
-  // which is exactly the muddy blue block this replaces). Sample the ACTUAL
-  // background color from the source image's own edge instead of assuming
-  // white — using the unpadded 8x8 `probe` canvas above, not the padded
-  // LOGO_DOT_COLS/ROWS grid, whose border cells are always our own transparent
-  // contain-fit margin rather than actual image content. Then flood-fill
-  // outward from the grid's border matching that sampled color — cells reached
-  // that way are the real background regardless of what color it is; enclosed
-  // cells of a different color (line art on a badge, letters on a white chip)
-  // are left as the mark. The mark itself is always drawn as plain white dots —
-  // this sign doesn't try to reproduce logo colors, just shape, directly on the
-  // black backdrop (no colored box behind it).
-  let bgR = 255;
-  let bgG = 255;
-  let bgB = 255;
-  if (isOpaqueIcon) {
-    let sumR = 0;
-    let sumG = 0;
-    let sumB = 0;
-    let count = 0;
-    for (let py = 0; py < 8; py++) {
-      for (let px = 0; px < 8; px++) {
-        if (py > 0 && py < 7 && px > 0 && px < 7) continue; // only the outer ring
-        const pidx = (py * 8 + px) * 4;
-        sumR += probeData[pidx];
-        sumG += probeData[pidx + 1];
-        sumB += probeData[pidx + 2];
-        count++;
-      }
-    }
-    if (count > 0) {
-      bgR = sumR / count;
-      bgG = sumG / count;
-      bgB = sumB / count;
-    }
-  }
-
-  const BG_COLOR_TOLERANCE = 60;
-  const isBackgroundish = (idx) => {
-    const a = data[idx + 3];
-    if (a < 12) return true; // our own contain-fit padding
-    if (!isOpaqueIcon) return false; // silhouette mode has no background chip to flood
-    const dr = data[idx] - bgR;
-    const dg = data[idx + 1] - bgG;
-    const db = data[idx + 2] - bgB;
-    return Math.sqrt(dr * dr + dg * dg + db * db) < BG_COLOR_TOLERANCE;
-  };
-  const isBackground = new Uint8Array(LOGO_DOT_COLS * LOGO_DOT_ROWS);
-  const stack = [];
-  for (let x = 0; x < LOGO_DOT_COLS; x++) {
-    stack.push(x, LOGO_DOT_COLS * (LOGO_DOT_ROWS - 1) + x);
-  }
-  for (let y = 0; y < LOGO_DOT_ROWS; y++) {
-    stack.push(y * LOGO_DOT_COLS, y * LOGO_DOT_COLS + LOGO_DOT_COLS - 1);
-  }
-  while (stack.length) {
-    const cell = stack.pop();
-    if (isBackground[cell]) continue;
-    const cx0 = cell % LOGO_DOT_COLS;
-    const cy0 = (cell / LOGO_DOT_COLS) | 0;
-    if (!isBackgroundish(cell * 4)) continue;
-    isBackground[cell] = 1;
-    if (cx0 > 0) stack.push(cell - 1);
-    if (cx0 < LOGO_DOT_COLS - 1) stack.push(cell + 1);
-    if (cy0 > 0) stack.push(cell - LOGO_DOT_COLS);
-    if (cy0 < LOGO_DOT_ROWS - 1) stack.push(cell + LOGO_DOT_COLS);
-  }
-
+  // The whole sampled image is dot-matrixed as-is, background chip included —
+  // a logo's white (or blue, or whatever) background is part of its actual
+  // appearance, not something to strip out. Every cell gets its own true
+  // sampled color; only cells outside the contain-fit area (our own padding,
+  // fully transparent) are skipped.
   const cellW = w / LOGO_DOT_COLS;
   const cellH = h / LOGO_DOT_ROWS;
   for (let y = 0; y < LOGO_DOT_ROWS; y++) {
     for (let x = 0; x < LOGO_DOT_COLS; x++) {
-      const cell = y * LOGO_DOT_COLS + x;
-      const idx = cell * 4;
+      const idx = (y * LOGO_DOT_COLS + x) * 4;
       const r = data[idx];
       const g = data[idx + 1];
       const b = data[idx + 2];
       const alpha = data[idx + 3] / 255;
-      if (alpha < 0.05) continue; // outside the contain-fit area (our own padding)
-      if (isBackground[cell]) continue;
-      if (!isOpaqueIcon && alpha < 0.12) continue;
+      if (alpha < 0.12) continue; // our own contain-fit padding (or true transparency)
 
       const cx = x * cellW + cellW / 2;
       const cy = y * cellH + cellH / 2;
-      const radius = (Math.min(cellW, cellH) / 2) * 0.68 * Math.max(alpha, 0.75);
+      const radius = (Math.min(cellW, cellH) / 2) * 0.7 * Math.max(alpha, 0.75);
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.55 + 0.45 * alpha})`;
