@@ -428,7 +428,13 @@ function drawDotMatrixLogo(canvas, source) {
       const g = data[idx + 1];
       const b = data[idx + 2];
       const alpha = data[idx + 3] / 255;
-      if (alpha < 0.12) continue; // our own contain-fit padding (or true transparency)
+      // Only skip cells that are truly transparent (our own contain-fit padding
+      // outside the drawn image, or a genuinely transparent pixel in the
+      // source). The earlier, higher cutoff (0.12) was also dropping cells with
+      // real but partial coverage — anti-aliased edges, or artifacts from
+      // downsampling a much larger source image into this small a grid — which
+      // showed up as unlit "holes" inside an otherwise solid area of the logo.
+      if (alpha < 0.02) continue;
 
       const cx = x * cellW + cellW / 2;
       const cy = y * cellH + cellH / 2;
