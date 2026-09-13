@@ -580,9 +580,15 @@ function initMap() {
     attributionControl: true,
   });
   L.control.zoom({ position: 'topright' }).addTo(map);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    subdomains: 'abcd',
+  // CARTO's free basemaps.cartocdn.com tiles now require an API key (a provider-side
+  // change, not something this app controls) — every style on that host returns an
+  // "API KEY REQUIRED" watermark as of this writing. Standard OSM tiles are the
+  // remaining free, keyless option; the dark look is faked with a CSS filter on the
+  // tile pane (see .leaflet-tile-pane in style.css) rather than a tile-server style,
+  // since OSM only serves the light default.
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    subdomains: 'abc',
     maxZoom: 19,
   }).addTo(map);
   const radiusLabel = document.getElementById('map-radius-label');
