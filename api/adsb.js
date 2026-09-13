@@ -7,7 +7,10 @@ export default async function handler(req, res) {
   }
   try {
     const upstream = await fetch(
-      `https://api.adsb.lol/v2/point/${encodeURIComponent(lat)}/${encodeURIComponent(lon)}/${encodeURIComponent(radius)}`
+      `https://api.adsb.lol/v2/point/${encodeURIComponent(lat)}/${encodeURIComponent(lon)}/${encodeURIComponent(radius)}`,
+      // api.adsb.lol now rejects requests with a generic/default User-Agent
+      // (the runtime's default) with a 403 — it requires an identifying UA.
+      { headers: { 'User-Agent': 'OverheadFlightBoard/1.0 (local personal flight tracker)' } }
     );
     const body = await upstream.text();
     res.setHeader('Access-Control-Allow-Origin', '*');

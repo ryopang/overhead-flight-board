@@ -20,9 +20,13 @@ const MIME = {
   '.wav': 'audio/wav',
 };
 
+// api.adsb.lol rejects requests with a generic/default User-Agent (Node's
+// https.get/fetch default) with a 403 — it now requires an identifying UA.
+const FETCH_HEADERS = { 'User-Agent': 'OverheadFlightBoard/1.0 (local personal flight tracker)' };
+
 function proxyJson(upstreamUrl, res) {
   https
-    .get(upstreamUrl, (upstreamRes) => {
+    .get(upstreamUrl, { headers: FETCH_HEADERS }, (upstreamRes) => {
       let data = '';
       upstreamRes.on('data', (chunk) => (data += chunk));
       upstreamRes.on('end', () => {
