@@ -52,6 +52,7 @@ body {
 .page {
   width: 100%;
   max-width: 1400px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -61,6 +62,7 @@ body {
 .board {
   position: relative;
   width: 100%;
+  min-width: 0;
   /* Sized to its actual content (header + column headers + however many rows
      are configured) rather than a fixed 100vh — a fixed height left a large
      dead gap below the rows whenever the row count was small. The map section
@@ -76,18 +78,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 8px;
   flex: 0 0 auto;
 }
 
 .eyebrow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  min-width: 0;
   gap: 12px;
   font-family: var(--head-font);
   font-weight: 800;
   letter-spacing: 0.14em;
   color: var(--header-white);
-  font-size: clamp(18px, 2.6vw, 26px);
+  font-size: clamp(15px, 2.6vw, 26px);
 }
 
 .plane-icon {
@@ -101,6 +108,8 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .settings-btn {
@@ -132,11 +141,16 @@ body {
   position: absolute;
   top: 64px;
   right: 16px;
+  left: 16px;
+  margin-left: auto;
   z-index: 50;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
+  max-width: min(320px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   background: var(--cell-bg);
   border: 1px solid var(--cell-border);
   border-radius: 4px;
@@ -149,7 +163,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
 
 .settings-label {
@@ -162,6 +177,8 @@ body {
 
 .settings-options {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 
@@ -310,6 +327,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  /* The board's 37 fixed-width character cells need ~840px minimum, which is
+     wider than any phone (folded or unfolded) or narrow foldable cover
+     screen. Rather than redesign the locked column layout per breakpoint,
+     let this section scroll horizontally as one unit — column-headers and
+     rows share the same grid-template-columns formula so they stay aligned
+     while scrolling together. */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .board-content[hidden] {
