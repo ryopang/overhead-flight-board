@@ -706,9 +706,10 @@ body {
   background: var(--board-chassis);
 }
 
-/* OSM only serves light tiles (the free CARTO dark style now requires an API key —
-   see initMap in app.js). Invert+rotate just the tile pane to approximate a dark
-   map without touching marker/popup panes, which stay their real colors. */
+/* This basemap only ships a light style (the free CARTO dark style now requires
+   an API key — see initMap in app.js). Invert+rotate just the tile pane to
+   approximate a dark map without touching marker/popup panes, which stay their
+   real colors. */
 .leaflet-tile-pane {
   filter: grayscale(0.6) invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.7);
 }

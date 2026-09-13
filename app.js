@@ -582,15 +582,23 @@ function initMap() {
   L.control.zoom({ position: 'topright' }).addTo(map);
   // CARTO's free basemaps.cartocdn.com tiles now require an API key (a provider-side
   // change, not something this app controls) — every style on that host returns an
-  // "API KEY REQUIRED" watermark as of this writing. Standard OSM tiles are the
-  // remaining free, keyless option; the dark look is faked with a CSS filter on the
-  // tile pane (see .leaflet-tile-pane in style.css) rather than a tile-server style,
-  // since OSM only serves the light default.
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
-    subdomains: 'abc',
-    maxZoom: 19,
-  }).addTo(map);
+  // "API KEY REQUIRED" watermark as of this writing. Standard OSM tiles were the
+  // first free/keyless fallback, but their default style is too visually busy
+  // (terrain texture, numbered highway shields) next to the board's minimal look.
+  // Esri's public "Light Gray Canvas" basemap (no key required, the same free
+  // tile service behind Leaflet's well-known Esri.WorldGrayCanvas preset) is a
+  // deliberately minimal style closer to CARTO's original Positron/Dark Matter —
+  // base + a separate reference layer for labels, per Esri's usual two-layer
+  // setup for this basemap. The dark look is faked with a CSS filter on the tile
+  // pane (see .leaflet-tile-pane in style.css) since this basemap only ships light.
+  L.tileLayer(
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    { attribution: '&copy; Esri', maxZoom: 16 }
+  ).addTo(map);
+  L.tileLayer(
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 16 }
+  ).addTo(map);
   const radiusLabel = document.getElementById('map-radius-label');
   if (radiusLabel) radiusLabel.textContent = `${CONFIG.MAP_RADIUS_MI}MI RADIUS`;
   recenterMap();
