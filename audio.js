@@ -17,6 +17,9 @@ class ClackPlayer {
     this.muted = false;
     this.buffer = null;
     this.bufferPromise = null;
+    this.tickBuffer = null;
+    this.tockBuffer = null;
+    this.tickStep = 0;
   }
 
   /** Must be called from a user gesture (Safari autoplay policy). */
@@ -25,10 +28,17 @@ class ClackPlayer {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
     if (this.ctx.state === 'suspended') this.ctx.resume();
-    this.bufferPromise = this._loadBuffer();
+    this.bufferPromise = this._loadBuffers();
   }
 
-  async _loadBuffer() {
+  async _loadBuffers() {
+    await Promise.all([
+      this._loadClackBuffer(),
+      this._loadClockBuffers(),
+    ]);
+  }
+
+  async _loadClackBuffer() {
     try {
       const res = await fetch('/clack.wav');
       if (!res.ok) throw new Error(`clack.wav ${res.status}`);
@@ -39,8 +49,44 @@ class ClackPlayer {
     }
   }
 
+  async _loadClockBuffers() {
+    try {
+      const [resTick, resTock] = await Promise.all([
+        fetch('/clock-tick.wav'),
+        fetch('/clock-tock.wav'),
+      ]);
+      if (resTick.ok) {
+        const ab = await resTick.arrayBuffer();
+        this.tickBuffer = await this.ctx.decodeAudioData(ab);
+      }
+      if (resTock.ok) {
+        const ab = await resTock.arrayBuffer();
+        this.tockBuffer = await this.ctx.decodeAudioData(ab);
+      }
+    } catch {
+      // non-blocking
+    }
+  }
+
   setMuted(muted) {
     this.muted = muted;
+  }
+
+  playClockTick(step) {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const currentStep = typeof step === 'number' ? step : this.tickStep++;
+    const buf = currentStep % 2 === 0 ? this.tickBuffer : (this.tockBuffer || this.tickBuffer);
+    if (!buf) return;
+
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = 0.95;
+    src.connect(g).connect(ctx.destination);
+    src.start(t);
   }
 
   _noiseBuffer(ctx, dur) {

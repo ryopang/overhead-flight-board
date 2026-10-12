@@ -842,8 +842,9 @@ function main() {
 
   function render(rows) {
     emptyState.hidden = rows.length > 0;
+    const onClack = displayMode === 'clock' ? null : () => clack.clack();
     for (let i = 0; i < rowCount; i++) {
-      boardRows[i].setData(rows[i] || null, () => clack.clack());
+      boardRows[i].setData(rows[i] || null, onClack);
     }
     updateMapFlights(rows);
     updateSingleView(singleViewRefs, rows[0] || null);
@@ -959,6 +960,28 @@ function main() {
   // board chassis to fill the screen (see .page.mode-single in style.css). ----
 
   let displayMode = loadDisplayMode();
+  let clockTickTimer = null;
+
+  function scheduleNextClockTick() {
+    if (displayMode !== 'clock') return;
+    const now = new Date();
+    clack.playClockTick(now.getSeconds());
+    const msUntilNextSec = Math.max(20, 1000 - (Date.now() % 1000));
+    clockTickTimer = setTimeout(scheduleNextClockTick, msUntilNextSec);
+  }
+
+  function startClockTicking() {
+    if (clockTickTimer) clearTimeout(clockTickTimer);
+    const msUntilNextSec = Math.max(20, 1000 - (Date.now() % 1000));
+    clockTickTimer = setTimeout(scheduleNextClockTick, msUntilNextSec);
+  }
+
+  function stopClockTicking() {
+    if (clockTickTimer) {
+      clearTimeout(clockTickTimer);
+      clockTickTimer = null;
+    }
+  }
 
   function applyDisplayMode() {
     boardContent.hidden = displayMode !== 'board';
@@ -975,7 +998,9 @@ function main() {
       mapSection.hidden = true;
       paintMapToggle(false);
       mapToggle.disabled = true;
+      startClockTicking();
     } else {
+      stopClockTicking();
       mapToggle.disabled = false;
       setMapEnabled(loadMapEnabledFor(displayMode));
     }
@@ -1134,6 +1159,9 @@ function main() {
     clack.unlock();
     splash.hidden = true;
     document.getElementById('board').removeAttribute('aria-hidden');
+    if (displayMode === 'clock') {
+      startClockTicking();
+    }
     poll();
   }, { once: true });
 
