@@ -8,7 +8,6 @@ const CONFIG = {
   MIN_RADIUS_MI: 1,
   MAX_RADIUS_MI: 50,
   RADIUS_STEP_MI: 1,
-  MAP_RADIUS_MI: 5, // the map's fixed zoom extent — unrelated to the search radius above
   DEFAULT_FLIP_INTERVAL_MS: 60000, // how often the board refreshes/flips; user-configurable
   MIN_FLIP_INTERVAL_MS: 15000, // adsb.lol courtesy floor — never poll faster than this
   ROUTE_CACHE_TTL_MS: 15 * 60 * 1000,
@@ -24,6 +23,7 @@ const STORAGE_KEYS = {
   muted: 'overhead:muted',
   rowCount: 'overhead:rowCount',
   zip: 'overhead:zip',
+  zipLabel: 'overhead:zipLabel',
   radiusMi: 'overhead:radiusMi',
   mapEnabled: 'overhead:mapEnabled',
   mapEnabledSingle: 'overhead:mapEnabledSingle',
@@ -265,6 +265,7 @@ async function buildBoard(candidates, rowCount) {
     if (!route) continue; // GA / unresolved — drop and backfill from next candidate
     const logoUrl = await resolveLogo(route.iata);
     rows.push({
+      id: ac.hex || ac.flight,
       flight: ac.flight,
       airline: route.airline,
       route: `${route.origin}→${route.destination}`,
@@ -547,11 +548,11 @@ function updateSingleView(refs, row) {
 
 // ---------------- Map ----------------
 //
-// Shows the same flights already on the board (still just the ones currently
-// overhead, within RADIUS_NM) plotted on a map zoomed out to a MAP_RADIUS_MI-wide
-// view of the tracking location — geographic context, not an expanded search.
-// Static/non-interactive by design, matching the board's "nothing moves except
-// the flip" kiosk philosophy.
+// Shows the same flights already on the board (the ones currently overhead,
+// within the search radius) plotted on a map framed to that same radius, so
+// every flight on the board is visible. Pannable/zoomable; recenters whenever the
+// location or search radius changes. This is the one intentional exception to the
+// board's "nothing moves except the flip" kiosk philosophy.
 
 const PLANE_PATH_D =
   'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z';
@@ -559,7 +560,7 @@ const PLANE_PATH_D =
 let map = null;
 let homeMarker = null;
 let radiusCircle = null;
-let flightMarkers = new Map(); // flight number -> L.Marker
+let flightMarkers = new Map(); // aircraft id (ICAO hex, falling back to callsign) -> L.Marker
 
 function milesToLatDegrees(mi) {
   return mi / 69;
@@ -599,19 +600,21 @@ function initMap() {
     'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
     { maxZoom: 16 }
   ).addTo(map);
-  const radiusLabel = document.getElementById('map-radius-label');
-  if (radiusLabel) radiusLabel.textContent = `${CONFIG.MAP_RADIUS_MI}MI RADIUS`;
   recenterMap();
 }
 
 function recenterMap() {
   if (!map) return;
-  const dLat = milesToLatDegrees(CONFIG.MAP_RADIUS_MI);
-  const dLon = milesToLonDegrees(CONFIG.MAP_RADIUS_MI, trackingLocation.lat);
+  const radiusMi = searchRadiusMi;
+  const dLat = milesToLatDegrees(radiusMi);
+  const dLon = milesToLonDegrees(radiusMi, trackingLocation.lat);
   map.fitBounds([
     [trackingLocation.lat - dLat, trackingLocation.lon - dLon],
     [trackingLocation.lat + dLat, trackingLocation.lon + dLon],
   ]);
+
+  const radiusLabel = document.getElementById('map-radius-label');
+  if (radiusLabel) radiusLabel.textContent = `${radiusMi}MI RADIUS`;
 
   if (homeMarker) homeMarker.remove();
   homeMarker = L.marker([trackingLocation.lat, trackingLocation.lon], {
@@ -620,7 +623,7 @@ function recenterMap() {
 
   if (radiusCircle) radiusCircle.remove();
   radiusCircle = L.circle([trackingLocation.lat, trackingLocation.lon], {
-    radius: CONFIG.MAP_RADIUS_MI * 1609.34, // miles -> meters
+    radius: radiusMi * 1609.34, // miles -> meters
     color: '#2E2E2E',
     weight: 1,
     fill: false,
@@ -636,9 +639,9 @@ function updateMapFlights(rows) {
   const seen = new Set();
   for (const row of rows) {
     if (row.lat == null || row.lon == null) continue;
-    seen.add(row.flight);
+    seen.add(row.id);
     const rotation = row.track != null ? row.track : 0;
-    let marker = flightMarkers.get(row.flight);
+    let marker = flightMarkers.get(row.id);
     if (!marker) {
       const icon = L.divIcon({
         className: 'map-plane-icon',
@@ -647,7 +650,7 @@ function updateMapFlights(rows) {
         iconAnchor: [13.5, 13.5],
       });
       marker = L.marker([row.lat, row.lon], { icon }).addTo(map);
-      flightMarkers.set(row.flight, marker);
+      flightMarkers.set(row.id, marker);
     } else {
       marker.setLatLng([row.lat, row.lon]);
     }
@@ -657,11 +660,11 @@ function updateMapFlights(rows) {
       if (svg) svg.style.transform = `rotate(${rotation}deg)`;
     }
   }
-  // Drop markers for flights no longer on the board.
-  for (const [flight, marker] of flightMarkers) {
-    if (!seen.has(flight)) {
+  // Drop markers for aircraft no longer on the board.
+  for (const [id, marker] of flightMarkers) {
+    if (!seen.has(id)) {
       marker.remove();
-      flightMarkers.delete(flight);
+      flightMarkers.delete(id);
     }
   }
 }
@@ -674,6 +677,7 @@ function main() {
   const reconnectBadge = document.getElementById('reconnect-badge');
   const clockEl = document.getElementById('clock');
   const splash = document.getElementById('splash');
+  const splashLocation = document.getElementById('splash-location');
   const tapStart = document.getElementById('tap-start');
   const settingsBtn = document.getElementById('settings-btn');
   const settingsPanel = document.getElementById('settings-panel');
@@ -706,7 +710,10 @@ function main() {
   };
 
   initClock(clockEl);
+  searchRadiusMi = loadRadiusMi(); // must precede initMap(): the map is framed to this radius
   initMap();
+  const storedLabel = localStorage.getItem(STORAGE_KEYS.zipLabel);
+  if (storedLabel) showLocationLabel(storedLabel);
 
   const clack = new ClackPlayer();
   // Pre-build the max possible rows; unused ones stay hidden rather than being
@@ -960,6 +967,7 @@ function main() {
     searchRadiusMi = Math.max(CONFIG.MIN_RADIUS_MI, Math.min(CONFIG.MAX_RADIUS_MI, next));
     localStorage.setItem(STORAGE_KEYS.radiusMi, String(searchRadiusMi));
     applyRadius();
+    recenterMap(); // keep the map framed to the search area
     // A different search radius needs a fresh candidate list — re-poll now, same
     // reasoning as a row-count change.
     if (!inBackoff) {
@@ -968,19 +976,28 @@ function main() {
     }
   }
 
-  searchRadiusMi = loadRadiusMi();
-  applyRadius();
+  applyRadius(); // searchRadiusMi was already loaded before initMap()
   radiusMinus.addEventListener('click', () => setRadius(searchRadiusMi - CONFIG.RADIUS_STEP_MI));
   radiusPlus.addEventListener('click', () => setRadius(searchRadiusMi + CONFIG.RADIUS_STEP_MI));
 
   // ---- Settings: tracking location (ZIP) ----
+
+  // Single place that pushes the resolved location name into every spot that
+  // used to be hardcoded to "Edgewater, NJ": the board eyebrow, the browser tab
+  // title, and the tap-to-start splash.
+  function showLocationLabel(label) {
+    eyebrowLocation.textContent = label;
+    document.title = `Overhead — ${label}`;
+    splashLocation.textContent = `Live flights over ${label}`;
+  }
 
   async function applyZip(zip, persist) {
     try {
       const geo = await geocodeZip(zip);
       trackingLocation.lat = geo.lat;
       trackingLocation.lon = geo.lon;
-      eyebrowLocation.textContent = geo.label;
+      showLocationLabel(geo.label);
+      localStorage.setItem(STORAGE_KEYS.zipLabel, geo.label);
       if (persist) localStorage.setItem(STORAGE_KEYS.zip, zip);
       recenterMap();
       zipStatus.textContent = `LOCATED: ${geo.label}`;
