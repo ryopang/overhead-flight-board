@@ -737,6 +737,10 @@ body {
   text-shadow: 0 0 14px rgba(245, 245, 240, 0.3);
 }
 
+.single-flight {
+  padding-top: clamp(14px, 2.5vw, 28px);
+}
+
 .single-route,
 .single-type {
   color: rgba(245, 245, 240, 0.78);
@@ -774,7 +778,7 @@ body {
   font-weight: 800;
   letter-spacing: 0.01em;
   color: var(--header-white);
-  font-size: clamp(44px, 11vw, 128px);
+  font-size: clamp(36px, 8vw, 88px);
   line-height: 1.1;
   text-shadow: 0 0 18px rgba(245, 245, 240, 0.3);
   /* Long destination names (e.g. "Barnstable Municipal Boardman Polando Field")
