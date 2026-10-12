@@ -396,8 +396,9 @@ function initArtClock(svg) {
     return segs;
   });
 
+  const colonCircles = [];
   for (const cy of ART_CLOCK.colonYs) {
-    make('circle', { cx: ART_CLOCK.colonX, cy, r: 4.8, fill: ART_CLOCK.color });
+    colonCircles.push(make('circle', { cx: ART_CLOCK.colonX, cy, r: 4.8, fill: ART_CLOCK.color }));
   }
 
   function paint(segs, ch) {
@@ -416,8 +417,36 @@ function initArtClock(svg) {
     paint(digits[2], mm[0]);
     paint(digits[3], mm[1]);
   }
+
+  let colonOffTimer = null;
+  function setColon(visible) {
+    for (const c of colonCircles) {
+      c.style.display = visible ? '' : 'none';
+    }
+  }
+
+  function flashColon() {
+    if (colonOffTimer) clearTimeout(colonOffTimer);
+    setColon(true);
+    const msPastSec = Date.now() % 1000;
+    const msUntilHalf = Math.max(50, 500 - msPastSec);
+    colonOffTimer = setTimeout(() => {
+      setColon(false);
+      colonOffTimer = null;
+    }, msUntilHalf);
+  }
+
+  function stop() {
+    if (colonOffTimer) {
+      clearTimeout(colonOffTimer);
+      colonOffTimer = null;
+    }
+    setColon(true);
+  }
+
   tick();
-  setInterval(tick, 1000);
+
+  return { tick, setColon, flashColon, stop };
 }
 
 // ---------------- Board rendering ----------------
@@ -794,7 +823,7 @@ function main() {
   };
 
   initClock(clockEl);
-  initArtClock(document.getElementById('art-clock'));
+  const artClock = initArtClock(document.getElementById('art-clock'));
   searchRadiusMi = loadRadiusMi(); // must precede initMap(): the map is framed to this radius
   initMap();
   const storedLabel = localStorage.getItem(STORAGE_KEYS.zipLabel);
@@ -966,12 +995,20 @@ function main() {
     if (displayMode !== 'clock') return;
     const now = new Date();
     clack.playClockTick(now.getSeconds());
+    if (artClock) {
+      artClock.tick();
+      artClock.flashColon();
+    }
     const msUntilNextSec = Math.max(20, 1000 - (Date.now() % 1000));
     clockTickTimer = setTimeout(scheduleNextClockTick, msUntilNextSec);
   }
 
   function startClockTicking() {
     if (clockTickTimer) clearTimeout(clockTickTimer);
+    if (artClock) {
+      artClock.tick();
+      artClock.setColon(true);
+    }
     const msUntilNextSec = Math.max(20, 1000 - (Date.now() % 1000));
     clockTickTimer = setTimeout(scheduleNextClockTick, msUntilNextSec);
   }
@@ -980,6 +1017,9 @@ function main() {
     if (clockTickTimer) {
       clearTimeout(clockTickTimer);
       clockTickTimer = null;
+    }
+    if (artClock) {
+      artClock.stop();
     }
   }
 
