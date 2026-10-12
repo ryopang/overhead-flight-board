@@ -912,3 +912,63 @@ body {
 #tap-start:active {
   background: #d99f00;
 }
+
+/* ---------------- Clock view (full-bleed artwork with a live clock) ---------------- */
+/* The stage is fixed to the viewport (so it fills the page edge-to-edge even past
+   .page's 1400px max-width) and sized like `object-fit: cover`: wide enough to
+   cover both the viewport width and — via the image's aspect ratio — its height.
+   The <img> and the SVG overlay share the exact same box, so the clock face drawn
+   in the SVG (in image pixel coordinates) always lines up with the picture. */
+
+.clock-content {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.clock-content[hidden] {
+  display: none;
+}
+
+.clock-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100vw, calc(100vh * 1024 / 581));
+  aspect-ratio: 1024 / 581;
+  transform: translate(-50%, -50%);
+}
+
+.clock-art,
+.clock-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Header floats over the artwork: only the settings button stays visible (the
+   eyebrow and corner clock would be redundant on top of the picture). */
+.page.mode-clock .board {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.page.mode-clock .board-header {
+  position: relative;
+  z-index: 2;
+}
+
+.page.mode-clock .eyebrow,
+.page.mode-clock .clock {
+  display: none;
+}
+
+.page.mode-clock .settings-btn {
+  background: rgba(10, 10, 10, 0.65);
+  border-color: rgba(245, 245, 240, 0.25);
+}

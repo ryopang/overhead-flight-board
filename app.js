@@ -31,7 +31,8 @@ const STORAGE_KEYS = {
 };
 
 function loadDisplayMode() {
-  return localStorage.getItem(STORAGE_KEYS.displayMode) === 'single' ? 'single' : 'board';
+  const stored = localStorage.getItem(STORAGE_KEYS.displayMode);
+  return stored === 'single' || stored === 'clock' ? stored : 'board';
 }
 
 function loadFlipInterval() {
@@ -332,6 +333,89 @@ function initClock(container) {
     h2.set(hh[1]);
     m1.set(mm[0]);
     m2.set(mm[1]);
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ---------------- Artwork clock (CLOCK view) ----------------
+//
+// The CLOCK view shows clock-bg.png full-bleed, with the clock the character is
+// holding replaced by the real current time. Everything is drawn as SVG in the
+// image's OWN pixel coordinates (1024x581, via the SVG viewBox), and the SVG is
+// stretched over the image with identical sizing, so the face stays exactly on
+// the picture's screen however the image is scaled/cropped to fill the page.
+
+const ART_CLOCK = {
+  // The white LCD screen inside the orange frame — painted over to hide the
+  // original "10:59" baked into the picture.
+  screen: { x: 636, y: 400, w: 197, h: 72, rx: 7, fill: '#fdfdfb' },
+  digitY: 411,
+  digitX: [651, 686, 753, 791], // left edge of H1, H2, M1, M2
+  colonX: 730,
+  colonYs: [429, 449],
+  color: '#3b3733',
+  strokeWidth: 6.5,
+};
+
+// Segment endpoints inside a 27x54 digit box (round-capped strokes). Vertical
+// segments run nearly to the horizontals so the corners join into solid LCD digits.
+const ART_SEG = {
+  a: [4, 3, 23, 3],
+  g: [4, 27, 23, 27],
+  d: [4, 51, 23, 51],
+  f: [3, 4, 3, 26],
+  b: [24, 4, 24, 26],
+  e: [3, 28, 3, 50],
+  c: [24, 28, 24, 50],
+};
+
+function initArtClock(svg) {
+  if (!svg) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const make = (tag, attrs, parent) => {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    (parent || svg).appendChild(el);
+    return el;
+  };
+
+  const s = ART_CLOCK.screen;
+  make('rect', { x: s.x, y: s.y, width: s.w, height: s.h, rx: s.rx, fill: s.fill });
+
+  const digits = ART_CLOCK.digitX.map((x) => {
+    const g = make('g', { transform: `translate(${x} ${ART_CLOCK.digitY})` });
+    const segs = {};
+    for (const [name, [x1, y1, x2, y2]] of Object.entries(ART_SEG)) {
+      segs[name] = make('line', {
+        x1, y1, x2, y2,
+        stroke: ART_CLOCK.color,
+        'stroke-width': ART_CLOCK.strokeWidth,
+        'stroke-linecap': 'round',
+      }, g);
+    }
+    return segs;
+  });
+
+  for (const cy of ART_CLOCK.colonYs) {
+    make('circle', { cx: ART_CLOCK.colonX, cy, r: 3.6, fill: ART_CLOCK.color });
+  }
+
+  function paint(segs, ch) {
+    const on = SEGMENTS[ch] || '';
+    for (const name of Object.keys(segs)) {
+      segs[name].style.display = on.includes(name) ? '' : 'none';
+    }
+  }
+
+  function tick() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    paint(digits[0], hh[0]);
+    paint(digits[1], hh[1]);
+    paint(digits[2], mm[0]);
+    paint(digits[3], mm[1]);
   }
   tick();
   setInterval(tick, 1000);
@@ -699,6 +783,7 @@ function main() {
   const pageEl = document.getElementById('page');
   const boardContent = document.getElementById('board-content');
   const singleContent = document.getElementById('single-content');
+  const clockContent = document.getElementById('clock-content');
   const viewModeOptions = document.getElementById('view-mode-options');
   const singleViewRefs = {
     flight: document.getElementById('single-flight'),
@@ -710,6 +795,7 @@ function main() {
   };
 
   initClock(clockEl);
+  initArtClock(document.getElementById('art-clock'));
   searchRadiusMi = loadRadiusMi(); // must precede initMap(): the map is framed to this radius
   initMap();
   const storedLabel = localStorage.getItem(STORAGE_KEYS.zipLabel);
@@ -878,11 +964,22 @@ function main() {
   function applyDisplayMode() {
     boardContent.hidden = displayMode !== 'board';
     singleContent.hidden = displayMode !== 'single';
+    clockContent.hidden = displayMode !== 'clock';
     pageEl.classList.toggle('mode-single', displayMode === 'single');
+    pageEl.classList.toggle('mode-clock', displayMode === 'clock');
     viewModeOptions.querySelectorAll('button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.mode === displayMode);
     });
-    setMapEnabled(loadMapEnabledFor(displayMode));
+    if (displayMode === 'clock') {
+      // Full-bleed artwork: no map below it. Don't touch the saved map
+      // preferences — just hide the section and lock the toggle while here.
+      mapSection.hidden = true;
+      paintMapToggle(false);
+      mapToggle.disabled = true;
+    } else {
+      mapToggle.disabled = false;
+      setMapEnabled(loadMapEnabledFor(displayMode));
+    }
   }
   applyDisplayMode();
 

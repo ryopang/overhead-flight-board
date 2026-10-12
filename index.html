@@ -43,6 +43,7 @@
       <div class="settings-options" id="view-mode-options" role="group">
         <button type="button" data-mode="board">BOARD</button>
         <button type="button" data-mode="single">SINGLE</button>
+        <button type="button" data-mode="clock">CLOCK</button>
       </div>
     </div>
     <div class="settings-row">
@@ -135,7 +136,15 @@
       </div>
     </div>
   </div>
+
+  <div class="clock-content" id="clock-content" hidden>
+    <div class="clock-stage">
+      <img class="clock-art" src="clock-bg.png" alt="" draggable="false" />
+      <svg class="clock-overlay" id="art-clock" viewBox="0 0 1024 581" aria-hidden="true"></svg>
+    </div>
+  </div>
 </div>
+
 
 <div class="map-section" id="map-section" aria-hidden="true">
   <div id="map"></div>
