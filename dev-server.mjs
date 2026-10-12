@@ -3,7 +3,8 @@
 // No dependencies beyond Node's built-ins.
 import http from 'node:http';
 import https from 'node:https';
-import { readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,7 +18,12 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
   '.wav': 'audio/wav',
+  '.mp4': 'video/mp4',
+  '.m4a': 'audio/mp4',
 };
 
 // api.adsb.lol rejects requests with a generic/default User-Agent (Node's
@@ -144,10 +150,47 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   try {
-    const data = await readFile(filePath);
+    const stats = await stat(filePath);
+    if (!stats.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
     const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    res.end(data);
+    const contentType = MIME[ext] || 'application/octet-stream';
+    const total = stats.size;
+    const rangeHeader = req.headers.range;
+
+    if (rangeHeader) {
+      const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (match) {
+        const start = parseInt(match[1], 10);
+        const end = match[2] ? parseInt(match[2], 10) : total - 1;
+        if (start >= total || end >= total || start > end) {
+          res.writeHead(416, { 'Content-Range': `bytes */${total}` });
+          res.end();
+          return;
+        }
+        const chunkSize = end - start + 1;
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': contentType,
+        });
+        const stream = createReadStream(filePath, { start, end });
+        stream.pipe(res);
+        return;
+      }
+    }
+
+    res.writeHead(200, {
+      'Content-Length': total,
+      'Accept-Ranges': 'bytes',
+      'Content-Type': contentType,
+    });
+    const stream = createReadStream(filePath);
+    stream.pipe(res);
   } catch {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');

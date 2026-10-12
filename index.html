@@ -171,13 +171,15 @@
   </div>
 
   <div class="clock-content" id="clock-content" hidden>
-    <div class="clock-stage">
+    <div class="clock-stage" id="clock-stage">
       <div class="clock-sky" aria-hidden="true">
         <img class="clock-cloud cloud-1" src="cloud.png" alt="" draggable="false" />
         <img class="clock-cloud cloud-2" src="cloud.png" alt="" draggable="false" />
       </div>
       <img class="clock-art" src="clock-fg.png" alt="" draggable="false" />
       <svg class="clock-overlay" id="art-clock" viewBox="0 0 1376 768" aria-hidden="true"></svg>
+      <video class="clock-alarm-video" id="clock-alarm-video" src="alarm.mp4" loop playsinline webkit-playsinline preload="auto" muted aria-label="Alarm animation" role="img"></video>
+      <img class="clock-alarm-fallback" id="clock-alarm-fallback" src="alarm.gif" alt="Alarm animation" draggable="false" />
     </div>
   </div>
 </div>

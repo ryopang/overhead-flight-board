@@ -862,6 +862,9 @@ function main() {
   const alarmBanner = document.getElementById('alarm-banner');
   const alarmBannerText = document.getElementById('alarm-banner-text');
   const alarmBannerStop = document.getElementById('alarm-banner-stop');
+  const clockStage = document.getElementById('clock-stage');
+  const clockAlarmVideo = document.getElementById('clock-alarm-video');
+  const clockAlarmFallback = document.getElementById('clock-alarm-fallback');
   const singleViewRefs = {
     flight: document.getElementById('single-flight'),
     route: document.getElementById('single-route'),
@@ -1168,6 +1171,18 @@ function main() {
 
   function triggerAlarm(message) {
     alarmActive = true;
+    if (displayMode !== 'clock') {
+      displayMode = 'clock';
+      localStorage.setItem(STORAGE_KEYS.displayMode, 'clock');
+      applyDisplayMode();
+    }
+    if (clockStage) {
+      clockStage.classList.add('is-alarm');
+    }
+    if (clockAlarmVideo) {
+      clockAlarmVideo.currentTime = 0;
+      clockAlarmVideo.play().catch(() => {});
+    }
     clack.startAlarm();
     alarmBannerText.textContent = message;
     alarmBanner.hidden = false;
@@ -1177,6 +1192,13 @@ function main() {
     if (!alarmActive && alarmBanner.hidden) return;
     alarmActive = false;
     clack.stopAlarm();
+    if (clockStage) {
+      clockStage.classList.remove('is-alarm');
+    }
+    if (clockAlarmVideo) {
+      clockAlarmVideo.pause();
+      clockAlarmVideo.currentTime = 0;
+    }
     alarmBanner.hidden = true;
     if (countdownFinished) {
       countdownFinished = false;
@@ -1187,6 +1209,12 @@ function main() {
 
   alarmBannerStop.addEventListener('click', dismissAlarm);
   alarmBanner.addEventListener('click', dismissAlarm);
+  if (clockAlarmVideo) {
+    clockAlarmVideo.addEventListener('click', dismissAlarm);
+  }
+  if (clockAlarmFallback) {
+    clockAlarmFallback.addEventListener('click', dismissAlarm);
+  }
 
   paintAlarmUI();
   paintCountdownUI();

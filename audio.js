@@ -20,6 +20,9 @@ class ClackPlayer {
     this.tickBuffer = null;
     this.tockBuffer = null;
     this.tickStep = 0;
+    this.alarmBuffer = null;
+    this.alarmSource = null;
+    this.alarmGain = null;
   }
 
   /** Must be called from a user gesture (Safari autoplay policy). */
@@ -35,6 +38,7 @@ class ClackPlayer {
     await Promise.all([
       this._loadClackBuffer(),
       this._loadClockBuffers(),
+      this._loadAlarmBuffer(),
     ]);
   }
 
@@ -68,8 +72,23 @@ class ClackPlayer {
     }
   }
 
+  async _loadAlarmBuffer() {
+    try {
+      const res = await fetch('/alarm-sound.wav');
+      if (res.ok) {
+        const ab = await res.arrayBuffer();
+        this.alarmBuffer = await this.ctx.decodeAudioData(ab);
+      }
+    } catch {
+      // non-blocking
+    }
+  }
+
   setMuted(muted) {
     this.muted = muted;
+    if (this.alarmGain && this.ctx) {
+      this.alarmGain.gain.setValueAtTime(muted ? 0 : 0.95, this.ctx.currentTime);
+    }
   }
 
   playClockTick(step) {
@@ -90,9 +109,23 @@ class ClackPlayer {
   }
 
   startAlarm() {
-    if (this.alarmTimer) return;
+    if (this.alarmSource || this.alarmTimer) return;
     if (!this.ctx) this.unlock();
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+
+    if (this.alarmBuffer) {
+      const ctx = this.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = this.alarmBuffer;
+      src.loop = true;
+      const gain = ctx.createGain();
+      gain.gain.value = this.muted ? 0 : 0.95;
+      src.connect(gain).connect(ctx.destination);
+      src.start(0);
+      this.alarmSource = src;
+      this.alarmGain = gain;
+      return;
+    }
 
     const beepBurst = () => {
       const ctx = this.ctx;
@@ -119,6 +152,16 @@ class ClackPlayer {
   }
 
   stopAlarm() {
+    if (this.alarmSource) {
+      try {
+        this.alarmSource.stop();
+        this.alarmSource.disconnect();
+      } catch {
+        // ignore
+      }
+      this.alarmSource = null;
+      this.alarmGain = null;
+    }
     if (this.alarmTimer) {
       clearInterval(this.alarmTimer);
       this.alarmTimer = null;
