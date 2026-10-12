@@ -936,8 +936,8 @@ body {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: max(100vw, calc(100vh * 1024 / 581));
-  aspect-ratio: 1024 / 581;
+  width: max(100vw, calc(100vh * 1376 / 768));
+  aspect-ratio: 1376 / 768;
   transform: translate(-50%, -50%);
 }
 

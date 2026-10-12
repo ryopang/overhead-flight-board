@@ -349,25 +349,24 @@ function initClock(container) {
 const ART_CLOCK = {
   // The white LCD screen inside the orange frame — painted over to hide the
   // original "10:59" baked into the picture.
-  screen: { x: 636, y: 400, w: 197, h: 72, rx: 7, fill: '#fdfdfb' },
-  digitY: 411,
-  digitX: [651, 686, 753, 791], // left edge of H1, H2, M1, M2
-  colonX: 730,
-  colonYs: [429, 449],
+  screen: { x: 850, y: 528, w: 266, h: 108, rx: 10, fill: '#fdfdfb' },
+  digitY: 546,
+  digitX: [873, 920, 1009, 1059], // left edge of H1, H2, M1, M2
+  colonX: 979,
+  colonYs: [570, 599],
   color: '#3b3733',
-  strokeWidth: 6.5,
+  strokeWidth: 8.5,
 };
 
-// Segment endpoints inside a 27x54 digit box (round-capped strokes). Vertical
-// segments run nearly to the horizontals so the corners join into solid LCD digits.
+// Segment endpoints inside a 36x72 digit box (round-capped strokes).
 const ART_SEG = {
-  a: [4, 3, 23, 3],
-  g: [4, 27, 23, 27],
-  d: [4, 51, 23, 51],
-  f: [3, 4, 3, 26],
-  b: [24, 4, 24, 26],
-  e: [3, 28, 3, 50],
-  c: [24, 28, 24, 50],
+  a: [5, 4, 31, 4],
+  g: [5, 36, 31, 36],
+  d: [5, 68, 31, 68],
+  f: [4, 5, 4, 35],
+  b: [32, 5, 32, 35],
+  e: [4, 37, 4, 67],
+  c: [32, 37, 32, 67],
 };
 
 function initArtClock(svg) {
@@ -398,7 +397,7 @@ function initArtClock(svg) {
   });
 
   for (const cy of ART_CLOCK.colonYs) {
-    make('circle', { cx: ART_CLOCK.colonX, cy, r: 3.6, fill: ART_CLOCK.color });
+    make('circle', { cx: ART_CLOCK.colonX, cy, r: 4.8, fill: ART_CLOCK.color });
   }
 
   function paint(segs, ch) {
