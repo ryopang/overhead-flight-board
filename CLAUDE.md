@@ -2,7 +2,7 @@
 
 You are building a local web app that displays nearby commercial flights as a
 split-flap airport board, plus a live map of the same flights. The original
-PRD is in ../flight-board-prd.md at the repo root (covers the split-flap
+PRD is in PRD.md at the repo root (covers the split-flap
 board's design tokens and phase-by-phase build plan); the project has since
 grown beyond that PRD's original scope (user-set location, configurable
 radius, map view, airline logos) via direct instruction — treat this file as
