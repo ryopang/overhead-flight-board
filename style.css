@@ -963,23 +963,23 @@ body {
 
 .clock-cloud.cloud-1 {
   top: 7.8%;
-  width: 16.57%;
-  aspect-ratio: 228 / 75;
-  animation: cloud-1-drift 46s linear infinite;
+  width: 18.46%;
+  aspect-ratio: 254 / 78;
+  animation: cloud-1-drift 62s linear infinite;
 }
 
 .clock-cloud.cloud-2 {
   top: 4.6%;
-  width: 13.8%;
-  aspect-ratio: 228 / 75;
+  width: 15%;
+  aspect-ratio: 254 / 78;
   opacity: 0.9;
-  animation: cloud-2-drift 46s linear infinite;
-  animation-delay: -23s;
+  animation: cloud-2-drift 62s linear infinite;
+  animation-delay: -31s;
 }
 
 @keyframes cloud-1-drift {
   0% {
-    transform: translate3d(620%, 0, 0);
+    transform: translate3d(560%, 0, 0);
   }
   100% {
     transform: translate3d(-120%, 0, 0);
@@ -988,7 +988,7 @@ body {
 
 @keyframes cloud-2-drift {
   0% {
-    transform: translate3d(740%, 0, 0);
+    transform: translate3d(680%, 0, 0);
   }
   100% {
     transform: translate3d(-120%, 0, 0);
