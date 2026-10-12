@@ -28,11 +28,28 @@ const STORAGE_KEYS = {
   mapEnabled: 'overhead:mapEnabled',
   mapEnabledSingle: 'overhead:mapEnabledSingle',
   displayMode: 'overhead:displayMode',
+  timeFormat: 'overhead:timeFormat',
+  alarmTime: 'overhead:alarmTime',
+  alarmEnabled: 'overhead:alarmEnabled',
 };
 
 function loadDisplayMode() {
   const stored = localStorage.getItem(STORAGE_KEYS.displayMode);
   return stored === 'single' || stored === 'clock' ? stored : 'board';
+}
+
+function loadTimeFormat() {
+  const stored = localStorage.getItem(STORAGE_KEYS.timeFormat);
+  return stored === '24h' ? '24h' : '12h';
+}
+
+function loadAlarmTime() {
+  const stored = localStorage.getItem(STORAGE_KEYS.alarmTime);
+  return stored && /^\d{2}:\d{2}$/.test(stored) ? stored : '07:00';
+}
+
+function loadAlarmEnabled() {
+  return localStorage.getItem(STORAGE_KEYS.alarmEnabled) === 'true';
 }
 
 function loadFlipInterval() {
@@ -408,14 +425,35 @@ function initArtClock(svg) {
     }
   }
 
-  function tick() {
+  let currentTimeFormat = '12h';
+
+  function setTimeFormat(fmt) {
+    currentTimeFormat = fmt === '24h' ? '24h' : '12h';
+  }
+
+  function paintChars(c0, c1, c2, c3) {
+    paint(digits[0], c0);
+    paint(digits[1], c1);
+    paint(digits[2], c2);
+    paint(digits[3], c3);
+  }
+
+  function tick(overrideStr) {
+    if (typeof overrideStr === 'string' && overrideStr.length >= 4) {
+      paintChars(overrideStr[0], overrideStr[1], overrideStr[2], overrideStr[3]);
+      return;
+    }
     const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
+    let hh;
+    if (currentTimeFormat === '12h') {
+      let h12 = now.getHours() % 12;
+      if (h12 === 0) h12 = 12;
+      hh = String(h12).padStart(2, ' ');
+    } else {
+      hh = String(now.getHours()).padStart(2, '0');
+    }
     const mm = String(now.getMinutes()).padStart(2, '0');
-    paint(digits[0], hh[0]);
-    paint(digits[1], hh[1]);
-    paint(digits[2], mm[0]);
-    paint(digits[3], mm[1]);
+    paintChars(hh[0], hh[1], mm[0], mm[1]);
   }
 
   let colonOffTimer = null;
@@ -446,7 +484,7 @@ function initArtClock(svg) {
 
   tick();
 
-  return { tick, setColon, flashColon, stop };
+  return { tick, setColon, flashColon, stop, setTimeFormat };
 }
 
 // ---------------- Board rendering ----------------
@@ -813,6 +851,17 @@ function main() {
   const singleContent = document.getElementById('single-content');
   const clockContent = document.getElementById('clock-content');
   const viewModeOptions = document.getElementById('view-mode-options');
+  const timeFormatOptions = document.getElementById('time-format-options');
+  const countdownInput = document.getElementById('countdown-input');
+  const countdownToggle = document.getElementById('countdown-toggle');
+  const countdownReset = document.getElementById('countdown-reset');
+  const countdownStatus = document.getElementById('countdown-status');
+  const alarmTimeInput = document.getElementById('alarm-time-input');
+  const alarmToggle = document.getElementById('alarm-toggle');
+  const alarmStatus = document.getElementById('alarm-status');
+  const alarmBanner = document.getElementById('alarm-banner');
+  const alarmBannerText = document.getElementById('alarm-banner-text');
+  const alarmBannerStop = document.getElementById('alarm-banner-stop');
   const singleViewRefs = {
     flight: document.getElementById('single-flight'),
     route: document.getElementById('single-route'),
@@ -989,16 +1038,221 @@ function main() {
   // board chassis to fill the screen (see .page.mode-single in style.css). ----
 
   let displayMode = loadDisplayMode();
+
+  // ---- Settings: 12/24 hr display, countdown & alarm (CLOCK view mode) ----
+  let timeFormat = loadTimeFormat();
+
+  function paintTimeFormatButtons() {
+    timeFormatOptions.querySelectorAll('button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.format === timeFormat);
+    });
+  }
+
+  timeFormatOptions.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-format]');
+    if (!btn) return;
+    timeFormat = btn.dataset.format;
+    localStorage.setItem(STORAGE_KEYS.timeFormat, timeFormat);
+    paintTimeFormatButtons();
+    if (artClock) {
+      artClock.setTimeFormat(timeFormat);
+      if (!countdownRunning && !countdownFinished) artClock.tick();
+    }
+    paintAlarmUI();
+  });
+
+  paintTimeFormatButtons();
+  if (artClock) artClock.setTimeFormat(timeFormat);
+
+  let countdownRunning = false;
+  let countdownEndTime = null;
+  let countdownFinished = false;
+
+  let alarmTime = loadAlarmTime();
+  let alarmEnabled = loadAlarmEnabled();
+  let alarmActive = false;
+  let alarmFiredMinute = null;
+
+  alarmTimeInput.value = alarmTime;
+
+  function formatAlarmDisplay(hhmm) {
+    if (!hhmm) return '--:--';
+    if (timeFormat === '24h') return hhmm;
+    const parts = hhmm.split(':');
+    let h = parseInt(parts[0], 10);
+    const mStr = parts[1] || '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${mStr} ${ampm}`;
+  }
+
+  function paintAlarmUI() {
+    alarmToggle.textContent = alarmEnabled ? 'ON' : 'OFF';
+    alarmToggle.classList.toggle('active', alarmEnabled);
+    if (alarmEnabled) {
+      alarmStatus.textContent = `SET FOR ${formatAlarmDisplay(alarmTime)}`;
+      alarmStatus.className = 'settings-status is-ok';
+    } else {
+      alarmStatus.textContent = 'ALARM OFF';
+      alarmStatus.className = 'settings-status';
+    }
+  }
+
+  function paintCountdownUI() {
+    countdownToggle.textContent = countdownRunning ? 'STOP' : 'START';
+    countdownToggle.classList.toggle('active', countdownRunning);
+    if (countdownRunning) {
+      const remainingSec = Math.max(0, Math.ceil((countdownEndTime - Date.now()) / 1000));
+      const m = Math.floor(remainingSec / 60);
+      const s = remainingSec % 60;
+      countdownStatus.textContent = `RUNNING: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      countdownStatus.className = 'settings-status is-ok';
+    } else if (countdownFinished) {
+      countdownStatus.textContent = 'FINISHED!';
+      countdownStatus.className = 'settings-status is-error';
+    } else {
+      countdownStatus.textContent = '';
+      countdownStatus.className = 'settings-status';
+    }
+  }
+
+  countdownInput.value = '5';
+
+  countdownToggle.addEventListener('click', () => {
+    if (countdownRunning) {
+      countdownRunning = false;
+      countdownFinished = false;
+      paintCountdownUI();
+      if (artClock) artClock.tick();
+    } else {
+      const mins = Math.max(1, Math.min(999, parseInt(countdownInput.value, 10) || 5));
+      countdownInput.value = String(mins);
+      countdownEndTime = Date.now() + mins * 60 * 1000;
+      countdownRunning = true;
+      countdownFinished = false;
+      dismissAlarm();
+      paintCountdownUI();
+      if (artClock) {
+        const mStr = String(mins).padStart(2, '0');
+        artClock.tick(`${mStr}00`);
+      }
+    }
+  });
+
+  countdownReset.addEventListener('click', () => {
+    countdownRunning = false;
+    countdownFinished = false;
+    dismissAlarm();
+    paintCountdownUI();
+    if (artClock) artClock.tick();
+  });
+
+  alarmToggle.addEventListener('click', () => {
+    alarmEnabled = !alarmEnabled;
+    localStorage.setItem(STORAGE_KEYS.alarmEnabled, String(alarmEnabled));
+    if (alarmTimeInput.value) {
+      alarmTime = alarmTimeInput.value;
+      localStorage.setItem(STORAGE_KEYS.alarmTime, alarmTime);
+    }
+    paintAlarmUI();
+  });
+
+  alarmTimeInput.addEventListener('change', () => {
+    if (alarmTimeInput.value) {
+      alarmTime = alarmTimeInput.value;
+      localStorage.setItem(STORAGE_KEYS.alarmTime, alarmTime);
+      paintAlarmUI();
+    }
+  });
+
+  function triggerAlarm(message) {
+    alarmActive = true;
+    clack.startAlarm();
+    alarmBannerText.textContent = message;
+    alarmBanner.hidden = false;
+  }
+
+  function dismissAlarm() {
+    if (!alarmActive && alarmBanner.hidden) return;
+    alarmActive = false;
+    clack.stopAlarm();
+    alarmBanner.hidden = true;
+    if (countdownFinished) {
+      countdownFinished = false;
+      paintCountdownUI();
+    }
+    if (artClock) artClock.tick();
+  }
+
+  alarmBannerStop.addEventListener('click', dismissAlarm);
+  alarmBanner.addEventListener('click', dismissAlarm);
+
+  paintAlarmUI();
+  paintCountdownUI();
+
+  function getCurrentClockOverride() {
+    if (countdownRunning) {
+      const remainingSec = Math.max(0, Math.ceil((countdownEndTime - Date.now()) / 1000));
+      const m = Math.floor(remainingSec / 60);
+      const s = remainingSec % 60;
+      return `${String(m).padStart(2, '0')}${String(s).padStart(2, '0')}`;
+    }
+    if (countdownFinished) return '0000';
+    return null;
+  }
+
   let clockTickTimer = null;
 
   function scheduleNextClockTick() {
     if (displayMode !== 'clock') return;
     const now = new Date();
-    clack.playClockTick(now.getSeconds());
+    const currentSec = now.getSeconds();
+
+    if (!alarmActive) {
+      clack.playClockTick(currentSec);
+    }
+
     if (artClock) {
-      artClock.tick();
       artClock.flashColon();
     }
+
+    let overrideStr = null;
+    if (countdownRunning) {
+      const remainingSec = Math.max(0, Math.ceil((countdownEndTime - Date.now()) / 1000));
+      const m = Math.floor(remainingSec / 60);
+      const s = remainingSec % 60;
+      const mStr = String(m).padStart(2, '0');
+      const sStr = String(s).padStart(2, '0');
+      overrideStr = `${mStr}${sStr}`;
+      paintCountdownUI();
+
+      if (remainingSec === 0) {
+        countdownRunning = false;
+        countdownFinished = true;
+        paintCountdownUI();
+        triggerAlarm('⏱️ TIMER FINISHED!');
+      }
+    } else if (countdownFinished) {
+      overrideStr = '0000';
+    }
+
+    // Check alarm time
+    const currentHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    if (alarmEnabled && !alarmActive) {
+      if (currentHHMM === alarmTime && currentSec === 0 && alarmFiredMinute !== currentHHMM) {
+        alarmFiredMinute = currentHHMM;
+        triggerAlarm(`⏰ ALARM (${formatAlarmDisplay(alarmTime)})`);
+      }
+    }
+    if (alarmFiredMinute && alarmFiredMinute !== currentHHMM) {
+      alarmFiredMinute = null;
+    }
+
+    if (artClock) {
+      artClock.tick(overrideStr);
+    }
+
     const msUntilNextSec = Math.max(20, 1000 - (Date.now() % 1000));
     clockTickTimer = setTimeout(scheduleNextClockTick, msUntilNextSec);
   }
@@ -1006,7 +1260,7 @@ function main() {
   function startClockTicking() {
     if (clockTickTimer) clearTimeout(clockTickTimer);
     if (artClock) {
-      artClock.tick();
+      artClock.tick(getCurrentClockOverride());
       artClock.setColon(true);
     }
     const msUntilNextSec = Math.max(20, 1000 - (Date.now() % 1000));
@@ -1021,6 +1275,7 @@ function main() {
     if (artClock) {
       artClock.stop();
     }
+    dismissAlarm();
   }
 
   function applyDisplayMode() {

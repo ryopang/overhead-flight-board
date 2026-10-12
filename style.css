@@ -245,9 +245,111 @@ body {
   letter-spacing: 0.05em;
 }
 
-#zip-input:focus {
+#zip-input:focus,
+#countdown-input:focus,
+#alarm-time-input:focus {
   outline: 2px solid var(--char-amber);
   outline-offset: 1px;
+}
+
+#countdown-input {
+  width: 64px;
+  min-height: 40px;
+  padding: 6px 8px;
+  background: var(--board-chassis);
+  border: 1px solid var(--cell-border);
+  border-radius: 3px;
+  color: var(--char-amber);
+  font-family: var(--flap-font);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+}
+
+#alarm-time-input {
+  min-height: 40px;
+  padding: 6px 8px;
+  background: var(--board-chassis);
+  border: 1px solid var(--cell-border);
+  border-radius: 3px;
+  color: var(--char-amber);
+  font-family: var(--flap-font);
+  font-weight: 700;
+  font-size: 14px;
+  color-scheme: dark;
+}
+
+.countdown-input-group,
+.alarm-input-group {
+  align-items: center;
+}
+
+/* Visibility toggling for Clock vs Flight settings */
+.page.mode-clock .settings-flight-only {
+  display: none !important;
+}
+
+.settings-clock-only {
+  display: none !important;
+}
+
+.page.mode-clock .settings-clock-only {
+  display: flex !important;
+}
+
+/* Alarm notification banner */
+.alarm-banner {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 22px;
+  background: rgba(15, 15, 15, 0.95);
+  border: 2px solid var(--char-amber);
+  border-radius: 6px;
+  box-shadow: 0 0 24px rgba(247, 181, 0, 0.6), 0 8px 32px rgba(0, 0, 0, 0.85);
+  animation: alarm-pulse 0.8s infinite alternate ease-in-out;
+}
+
+.alarm-banner[hidden] {
+  display: none;
+}
+
+.alarm-banner-text {
+  font-family: var(--head-font);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-size: 16px;
+  color: var(--char-amber);
+}
+
+.alarm-banner-stop {
+  min-height: 36px;
+  padding: 6px 16px;
+  background: var(--char-amber);
+  border: 1px solid var(--char-amber);
+  border-radius: 4px;
+  color: var(--board-chassis);
+  font-family: var(--flap-font);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+@keyframes alarm-pulse {
+  0% {
+    box-shadow: 0 0 16px rgba(247, 181, 0, 0.35);
+    border-color: rgba(247, 181, 0, 0.65);
+  }
+  100% {
+    box-shadow: 0 0 32px rgba(247, 181, 0, 0.9);
+    border-color: rgba(247, 181, 0, 1);
+  }
 }
 
 .settings-status-row {

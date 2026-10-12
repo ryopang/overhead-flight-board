@@ -89,6 +89,42 @@ class ClackPlayer {
     src.start(t);
   }
 
+  startAlarm() {
+    if (this.alarmTimer) return;
+    if (!this.ctx) this.unlock();
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+
+    const beepBurst = () => {
+      const ctx = this.ctx;
+      if (!ctx || this.muted) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      const t0 = ctx.currentTime;
+      // 3 crisp digital alarm beeps
+      for (let i = 0; i < 3; i++) {
+        const t = t0 + i * 0.1;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(2048, t);
+        g.gain.setValueAtTime(0.2, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.065);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.07);
+      }
+    };
+
+    beepBurst();
+    this.alarmTimer = setInterval(beepBurst, 1000);
+  }
+
+  stopAlarm() {
+    if (this.alarmTimer) {
+      clearInterval(this.alarmTimer);
+      this.alarmTimer = null;
+    }
+  }
+
   _noiseBuffer(ctx, dur) {
     const size = Math.max(1, Math.floor(ctx.sampleRate * dur));
     const buffer = ctx.createBuffer(1, size, ctx.sampleRate);

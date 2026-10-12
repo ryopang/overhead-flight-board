@@ -37,6 +37,11 @@
     </div>
   </header>
 
+  <div class="alarm-banner" id="alarm-banner" hidden>
+    <span class="alarm-banner-text" id="alarm-banner-text">⏰ ALARM</span>
+    <button type="button" class="alarm-banner-stop" id="alarm-banner-stop">DISMISS</button>
+  </div>
+
   <div class="settings-panel" id="settings-panel" hidden>
     <div class="settings-row">
       <span class="settings-label">VIEW</span>
@@ -46,17 +51,17 @@
         <button type="button" data-mode="clock">CLOCK</button>
       </div>
     </div>
-    <div class="settings-row">
+    <div class="settings-row settings-flight-only">
       <span class="settings-label">LOCATION (ZIP)</span>
       <div class="settings-options zip-input-group">
         <input type="text" id="zip-input" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="07020" autocomplete="off" />
         <button type="button" id="zip-set">SET</button>
       </div>
     </div>
-    <div class="settings-row settings-status-row">
+    <div class="settings-row settings-status-row settings-flight-only">
       <span class="settings-status" id="zip-status"></span>
     </div>
-    <div class="settings-row">
+    <div class="settings-row settings-flight-only">
       <span class="settings-label">FLIP EVERY</span>
       <div class="settings-options" id="interval-options" role="group">
         <button type="button" data-interval="15000">15S</button>
@@ -72,13 +77,41 @@
         <button type="button" id="mute-toggle" data-muted="false">ON</button>
       </div>
     </div>
-    <div class="settings-row">
+    <div class="settings-row settings-clock-only">
+      <span class="settings-label">12/24 HR</span>
+      <div class="settings-options" id="time-format-options" role="group">
+        <button type="button" data-format="12h">12H</button>
+        <button type="button" data-format="24h">24H</button>
+      </div>
+    </div>
+    <div class="settings-row settings-clock-only">
+      <span class="settings-label">COUNTDOWN</span>
+      <div class="settings-options countdown-input-group">
+        <input type="number" id="countdown-input" min="1" max="999" placeholder="MIN" />
+        <button type="button" id="countdown-toggle">START</button>
+        <button type="button" id="countdown-reset">RESET</button>
+      </div>
+    </div>
+    <div class="settings-row settings-status-row settings-clock-only">
+      <span class="settings-status" id="countdown-status"></span>
+    </div>
+    <div class="settings-row settings-clock-only">
+      <span class="settings-label">ALARM</span>
+      <div class="settings-options alarm-input-group">
+        <input type="time" id="alarm-time-input" />
+        <button type="button" id="alarm-toggle">OFF</button>
+      </div>
+    </div>
+    <div class="settings-row settings-status-row settings-clock-only">
+      <span class="settings-status" id="alarm-status"></span>
+    </div>
+    <div class="settings-row settings-flight-only">
       <span class="settings-label">MAP</span>
       <div class="settings-options">
         <button type="button" id="map-toggle">ON</button>
       </div>
     </div>
-    <div class="settings-row">
+    <div class="settings-row settings-flight-only">
       <span class="settings-label">ROWS</span>
       <div class="settings-options row-stepper">
         <button type="button" id="rows-minus" aria-label="Fewer rows">&minus;</button>
@@ -86,7 +119,7 @@
         <button type="button" id="rows-plus" aria-label="More rows">+</button>
       </div>
     </div>
-    <div class="settings-row">
+    <div class="settings-row settings-flight-only">
       <span class="settings-label">RADIUS (MI)</span>
       <div class="settings-options row-stepper">
         <button type="button" id="radius-minus" aria-label="Smaller radius">&minus;</button>
