@@ -593,13 +593,13 @@ body {
 .single-top {
   display: flex;
   align-items: center;
-  gap: clamp(40px, 7vw, 96px);
+  gap: clamp(48px, 8vw, 112px);
 }
 
 .single-logo-box {
   position: relative;
-  width: clamp(168px, 24vw, 336px);
-  height: clamp(168px, 24vw, 336px);
+  width: clamp(222px, 31.7vw, 443px);
+  height: clamp(222px, 31.7vw, 443px);
   flex: 0 0 auto;
   /* No background chip — the dot-matrix mark sits directly on the sign's own
      black backdrop, like the rest of the display, rather than in a colored box. */
